@@ -1,11 +1,12 @@
 ## BOOT BLOCK
-— # Last updated: 2026-03-31 | Boot Block: CC-HMCP-000001B
+— # Last updated: 2026-03-31 | Boot Block: CC-HMCP-000001C
 
 
 ### PROJECT IDENTITY
 - App: **Home MCP Compliance Lab** — home lab platform for building, operating, and auditing MCP servers with compliance visibility and structured controls
 - Repo: home-mcp-lab
 - Prompt schema: CC-HMCP-XXXXXX (tracks all Claude Code work for traceability)
+
 
 ## SYSTEM PURPOSE
 
@@ -22,6 +23,10 @@ Three goals:
 - Projects integrate via a defined registration contract (to be implemented)
 - Compliance logic, audit logging, and control enforcement live in the platform layer
 - Projects must not embed compliance logic directly into business code
+
+## REPOSITORY STRUCTURE
+- Repo: /home/drake/projects/home-mcp-lab
+- project identity: Home MCP Compliance Lab
 
 ### ARCHITECTURAL LAWS (immutable — do not violate without explicit architect approval)
 
@@ -173,13 +178,189 @@ The integration contract (schema + interface) is defined in this repo. Projects 
 ---
 
 
-### CURRENT STATE (as of CC-HMCP-000001B)
-- **Last completed:** CC-HMCP-000001B — Operating model, conventions, and platform definition
-- **Branch:** main
-- **Active task / next prompt:** CC-HMCP-000001C (TBD — architect to define)
+### CURRENT STATE (as of CC-HMCP-000001C)
+- Last completed: CC-HMCP-000001C — Architecture synchronized with current homelab reality
+- Branch: main (or feature branch if not merged yet)
+- Active task / next prompt: CC-HMCP-000001D — First visibility gap (Keeper non-interactive secret retrieval)
 
 ### ACTIVE TASK
-- CC-HMCP-000001C — TBD
+- CC-HMCP-000001D — Capture first visibility gap (Keeper non-interactive behavior)
+
+### KNOWN RISKS
+- Non-interactive secret retrieval is not fully stable across service contexts
+- Workflow/tool-level observability not yet implemented (infra-level only)
 
 ### KNOWN DEBT
 - None yet
+
+### BOOT BLOCK UPDATE CHECKLIST (apply after every CC-HMCP task)
+
+- [ ] Boot Block ID updated to current prompt (CC-HMCP-XXXXXX)
+- [ ] CURRENT STATE — Last completed updated
+- [ ] CURRENT STATE — Branch status updated
+- [ ] CURRENT STATE — Summary updated
+- [ ] ACTIVE TASK — Updated to next prompt
+- [ ] KNOWN RISKS / DEBT — Updated if new issues identified
+- [ ] BACKLOG — Items moved between states if applicable
+- [ ] Handoff document created in docs/handoffs/ (if session boundary)
+- [ ] chatgpt-primer.md updated if system understanding changed
+- [ ] Visibility gaps identified documented (VG-HMCP-*)
+
+---
+
+## CLAUDE CODE EXECUTION & RESPONSE STANDARD (MANDATORY)
+
+Claude must treat all CC-HMCP, VG-HMCP, CTRL-HMCP, ADR-HMCP, and TD-HMCP prompts as structured execution tasks — not open-ended requests.
+
+---
+
+### 1. Execution Discipline
+
+Claude must:
+
+- Execute ONLY what is defined in the prompt
+- NOT expand scope beyond what is written
+- NOT introduce additional features, files, or improvements
+- NOT reinterpret the objective
+
+If ambiguity exists:
+- Choose the most minimal valid interpretation
+- Do NOT invent requirements
+
+---
+
+### 2. No Silent Design Decisions
+
+Claude must NOT:
+
+- Introduce new architecture
+- Change patterns
+- Add abstractions not explicitly required
+
+If a decision is unclear:
+- Make the simplest possible choice
+- Document it briefly in output
+
+---
+
+### 3. Output Structure (REQUIRED)
+
+Every response must include:
+
+### Summary
+- What was done
+
+### Changes Made
+- Files created/modified
+- High-level description only
+
+### Notes
+- Any assumptions made
+- Any minor issues encountered
+
+### Validation
+- Confirmation that requirements were met
+
+---
+
+### 3.1 Prompt ID Traceability (REQUIRED)
+
+Claude must include the prompt ID in its response.
+
+Format:
+
+Executed: <PROMPT-ID>
+
+Example:
+Executed: VG-HMCP-000001
+
+This ensures traceability across:
+- commits
+- documents
+- handoffs
+
+---
+
+### 4. File Creation Rules
+
+- Only create files explicitly requested
+- Do NOT create additional files under any circumstances unless the prompt explicitly requires them
+- Do NOT rename files
+- Do NOT reorganize directories
+
+---
+
+### 5. Strict Scope Enforcement
+
+Claude must NOT:
+
+- Refactor unrelated code
+- Improve formatting outside scope
+- Add logging, comments, or enhancements unless required
+
+---
+
+### 6. Git Behavior
+
+- Follow provided branch name exactly
+- Use the provided commit message exactly
+- Do NOT modify commit message wording
+- Do NOT squash or split commits unless instructed
+
+---
+
+### 7. Failure Handling
+
+If the task cannot be completed:
+
+- STOP execution
+- Clearly explain the blocking issue
+- Do NOT attempt alternative approaches unless instructed
+
+---
+
+### 8. Visibility Gap / ADR / Control Pattern Rules
+
+For non-code artifacts:
+
+- Treat as formal documents
+- Follow required structure exactly
+- Do NOT add extra sections
+- Do NOT propose solutions unless explicitly requested
+- Section names and order must match the prompt exactly
+- Do NOT rename or reorganize sections
+
+---
+
+### 9. Deterministic Behavior Requirement
+
+Claude should behave as a predictable system component:
+
+- Same prompt → same structure of output
+- No creative variation in format
+- No stylistic drift
+
+---
+
+### 10. No Markdown Formatting Errors
+
+Claude must:
+
+- Avoid nested triple backticks unless required
+- Ensure all markdown renders correctly
+- Never break outer code blocks
+- Prefer plain text for file paths
+
+---
+
+### 11. Scope Uncertainty Handling
+
+If Claude is unsure whether an action is in scope:
+
+- STOP
+- Do NOT proceed
+- Report the ambiguity
+
+Do NOT guess or expand scope.
+
+---
