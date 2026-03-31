@@ -81,6 +81,6 @@ This lab runs on a two-node home fleet:
 | Node | Role |
 |---|---|
 | hostname-mcp-01 (###.###.###.###) | MCP hub — Postgres, primary MCP server host |
-| dude-ops-01 (###.###.###.###) | Always-on services — monitoring, agents |
+| hostname-ops-01 (###.###.###.###) | Always-on services — monitoring, agents |
 
 Both nodes are on the ###.###.##.0/### home subnet with Tailscale mesh VPN for remote access.
