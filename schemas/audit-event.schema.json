@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "home-mcp-lab/audit-event",
+  "title": "Home MCP Compliance Lab — Audit Event Schema",
+  "description": "Platform-level audit event schema for MCP tool invocations and runtime secret retrieval. Version 0 foundation. All events emitted by platform-managed services must conform to this structure. Secret values must never appear in any field.",
+  "schema_version": "0.1.0",
+
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "timestamp",
+    "platform",
+    "project_id",
+    "agent_id",
+    "mcp_server",
+    "action",
+    "status",
+    "correlation_id",
+    "metadata"
+  ],
+
+  "properties": {
+
+    "schema_version": {
+      "type": "string",
+      "description": "Version of this schema. Increment on breaking changes.",
+      "example": "0.1.0"
+    },
+
+    "event_id": {
+      "type": "string",
+      "description": "Unique identifier for this event instance. Recommended: UUID v4.",
+      "example": "a3f7c12e-4b91-4d2a-9f0e-1c8d6e3b2a57"
+    },
+
+    "event_type": {
+      "type": "string",
+      "description": "Categorizes the event. See defined event types below.",
+      "enum": ["tool.invocation", "secret.retrieval"],
+      "example": "tool.invocation"
+    },
+
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when the event occurred.",
+      "example": "2026-03-31T14:00:00Z"
+    },
+
+    "platform": {
+      "type": "string",
+      "description": "Identifier for the platform emitting the event. Always 'home-mcp-lab' for this system.",
+      "example": "home-mcp-lab"
+    },
+
+    "project_id": {
+      "type": "string",
+      "description": "Identifier of the project whose MCP server emitted this event.",
+      "example": "erate-workbench"
+    },
+
+    "agent_id": {
+      "type": "string",
+      "description": "Identifier of the agent or Claude Code session that triggered the action.",
+      "example": "claude-code-session-dude-mcp-01"
+    },
+
+    "mcp_server": {
+      "type": "string",
+      "description": "Identifier of the MCP server that processed the tool call or performed the retrieval.",
+      "example": "github-mcp-server"
+    },
+
+    "action": {
+      "type": "string",
+      "description": "The specific action taken. For tool.invocation: the tool name. For secret.retrieval: the retrieval mechanism identifier.",
+      "example": "read_file"
+    },
+
+    "status": {
+      "type": "string",
+      "description": "Outcome of the action.",
+      "enum": ["success", "failure"],
+      "example": "success"
+    },
+
+    "correlation_id": {
+      "type": "string",
+      "description": "Identifier linking related events within a single workflow or agent session.",
+      "example": "wf-20260331-001"
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Flexible extension field for event-type-specific context. Must never contain secret values, credentials, tokens, or sensitive data. See event type definitions for expected metadata fields.",
+      "additionalProperties": true
+    }
+
+  },
+
+  "definitions": {
+
+    "event_type.tool.invocation": {
+      "description": "Emitted when an MCP server executes a tool call on behalf of an agent.",
+      "metadata_fields": {
+        "tool_name": "string — name of the tool invoked (same as action field)",
+        "arguments_summary": "string — non-sensitive summary or schema of arguments; must not include secret or PII values",
+        "execution_duration_ms": "number — duration of tool execution in milliseconds",
+        "result_summary": "string — non-sensitive description of the outcome; must not include raw result data if sensitive"
+      }
+    },
+
+    "event_type.secret.retrieval": {
+      "description": "Emitted when a service or agent attempts to retrieve a secret via the platform-approved mechanism. Secret values must never appear in this event.",
+      "metadata_fields": {
+        "secret_identifier": "string — non-sensitive reference to which secret was requested (e.g., a vault path, record title, or identifier); must not be the secret value",
+        "retrieval_mode": "string — 'interactive' or 'non-interactive'",
+        "environment_context": "string — 'service' or 'cli' — describes the execution context",
+        "retrieval_mechanism": "string — identifier of the tool or method used (e.g., 'keeper-commander')",
+        "failure_reason": "string — present only on failure; non-sensitive description of why retrieval failed"
+      }
+    }
+
+  },
+
+  "constraints": [
+    "Secret values must never appear in any event field, including metadata.",
+    "Metadata must contain only non-sensitive, non-PII data.",
+    "All events must include the full set of required top-level fields.",
+    "The schema_version field must be updated when breaking changes are introduced.",
+    "This schema is platform-owned. Projects must not define their own audit event schemas."
+  ],
+
+  "examples": [
+    {
+      "_description": "tool.invocation — successful read_file call",
+      "schema_version": "0.1.0",
+      "event_id": "a3f7c12e-4b91-4d2a-9f0e-1c8d6e3b2a57",
+      "event_type": "tool.invocation",
+      "timestamp": "2026-03-31T14:00:00Z",
+      "platform": "home-mcp-lab",
+      "project_id": "erate-workbench",
+      "agent_id": "claude-code-session-dude-mcp-01",
+      "mcp_server": "filesystem-mcp-server",
+      "action": "read_file",
+      "status": "success",
+      "correlation_id": "wf-20260331-001",
+      "metadata": {
+        "tool_name": "read_file",
+        "arguments_summary": "path=/home/drake/projects/erate-workbench/README.md",
+        "execution_duration_ms": 12,
+        "result_summary": "File read successfully, 142 bytes"
+      }
+    },
+    {
+      "_description": "secret.retrieval — non-interactive Keeper retrieval failure",
+      "schema_version": "0.1.0",
+      "event_id": "b9e21d3a-7c04-4f88-ae12-3d5f0c9b1e84",
+      "event_type": "secret.retrieval",
+      "timestamp": "2026-03-31T14:01:30Z",
+      "platform": "home-mcp-lab",
+      "project_id": "erate-workbench",
+      "agent_id": "erate-api-service",
+      "mcp_server": "n/a",
+      "action": "keeper-commander",
+      "status": "failure",
+      "correlation_id": "wf-20260331-001",
+      "metadata": {
+        "secret_identifier": "erate/db-connection-string",
+        "retrieval_mode": "non-interactive",
+        "environment_context": "service",
+        "retrieval_mechanism": "keeper-commander",
+        "failure_reason": "Session token not present in service execution context"
+      }
+    }
+  ]
+}
