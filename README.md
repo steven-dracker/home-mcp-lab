@@ -80,7 +80,7 @@ This lab runs on a two-node home fleet:
 
 | Node | Role |
 |---|---|
-| dude-mcp-01 (192.168.1.208) | MCP hub — Postgres, primary MCP server host |
-| dude-ops-01 (192.168.1.210) | Always-on services — monitoring, agents |
+| hostname-mcp-01 (###.###.###.###) | MCP hub — Postgres, primary MCP server host |
+| dude-ops-01 (###.###.###.###) | Always-on services — monitoring, agents |
 
-Both nodes are on the 192.168.1.0/24 home subnet with Tailscale mesh VPN for remote access.
+Both nodes are on the ###.###.##.0/### home subnet with Tailscale mesh VPN for remote access.
