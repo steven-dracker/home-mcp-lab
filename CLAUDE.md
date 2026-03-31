@@ -1,5 +1,5 @@
 ## BOOT BLOCK
-— # Last updated: 2026-03-31 | Boot Block: CC-HMCP-000001C
+— # Last updated: 2026-03-31 | Boot Block: CC-HMCP-000001D
 
 
 ### PROJECT IDENTITY
@@ -178,16 +178,16 @@ The integration contract (schema + interface) is defined in this repo. Projects 
 ---
 
 
-### CURRENT STATE (as of CC-HMCP-000001C)
-- Last completed: CC-HMCP-000001C — Architecture synchronized with current homelab reality
-- Branch: main (or feature branch if not merged yet)
-- Active task / next prompt: CC-HMCP-000001D — First visibility gap (Keeper non-interactive secret retrieval)
+### CURRENT STATE (as of CC-HMCP-000001D)
+- Last completed: CC-HMCP-000001D — First visibility gap artifact: VG-HMCP-000001 Keeper non-interactive secret retrieval
+- Branch: feature/cc-hmcp-000001d-first-visibility-gap (pending PR)
+- Active task / next prompt: CC-HMCP-000001E — TBD (architect to define)
 
 ### ACTIVE TASK
-- CC-HMCP-000001D — Capture first visibility gap (Keeper non-interactive behavior)
+- CC-HMCP-000001E — TBD
 
 ### KNOWN RISKS
-- Non-interactive secret retrieval is not fully stable across service contexts
+- Non-interactive secret retrieval is not fully stable across service contexts (documented in VG-HMCP-000001)
 - Workflow/tool-level observability not yet implemented (infra-level only)
 
 ### KNOWN DEBT

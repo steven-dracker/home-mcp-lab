@@ -202,9 +202,9 @@ schemas/            Canonical event and data schemas
 
 <!-- UPDATE THIS SECTION after each Claude Code session using /handoff output -->
 
-- Last completed: CC-HMCP-000001C — Architecture sync with current homelab reality
-- Branch: main — clean, no open feature branches
-- Active task / next prompt: CC-HMCP-000001D — First visibility gap (Keeper non-interactive secret retrieval)
+- Last completed: CC-HMCP-000001D — First visibility gap artifact: VG-HMCP-000001 Keeper non-interactive secret retrieval
+- Branch: main — clean, no open feature branches (pending PR merge for CC-HMCP-000001D)
+- Active task / next prompt: CC-HMCP-000001E — TBD (architect to define)
 
 ---
 
