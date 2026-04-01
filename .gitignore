@@ -30,3 +30,6 @@ audit-log/
 
 # Ingestion boundary persistence store (server-side — not committed)
 ingestion-store/
+
+# Validation run logs (runtime artifacts — not committed)
+validate-mcp.stderr.log
