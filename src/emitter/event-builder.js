@@ -6,6 +6,106 @@ const SCHEMA_VERSION = '0.2.0';
 const PLATFORM = 'home-mcp-lab';
 
 /**
+ * Builds a schema-conforming session.start audit event.
+ *
+ * Required context fields:
+ *   projectId, agentId, mcpServer, correlationId
+ *
+ * Optional context fields:
+ *   initiatingContext, sessionType, executionMode
+ *
+ * Throws if any required field is missing.
+ */
+function buildSessionStartEvent(context) {
+  const required = ['projectId', 'agentId', 'mcpServer', 'correlationId'];
+  for (const field of required) {
+    if (!context[field]) {
+      throw new Error(`Missing required emitter context field: ${field}`);
+    }
+  }
+
+  const metadata = {
+    session_type: context.sessionType || 'interactive',
+    execution_mode: context.executionMode || 'agent-mediated'
+  };
+  if (context.initiatingContext) {
+    metadata.initiating_context = context.initiatingContext;
+  }
+
+  return {
+    schema_version: SCHEMA_VERSION,
+    event_id: randomUUID(),
+    event_type: 'session.start',
+    timestamp: new Date().toISOString(),
+    platform: PLATFORM,
+    project_id: context.projectId,
+    agent_id: context.agentId,
+    mcp_server: context.mcpServer,
+    action: 'mcp_session_init',
+    status: 'success',
+    correlation_id: context.correlationId,
+    metadata
+  };
+}
+
+/**
+ * Builds a schema-conforming session.end audit event.
+ *
+ * Required context fields:
+ *   projectId, agentId, mcpServer, correlationId
+ *
+ * Required outcome fields:
+ *   status ('success' | 'failure'), sessionStartTime (ms since epoch)
+ *
+ * Optional outcome fields:
+ *   completionReason, outcomeSummary, failureReason
+ *
+ * Throws if any required field is missing or invalid.
+ */
+function buildSessionEndEvent(context, outcome) {
+  const required = ['projectId', 'agentId', 'mcpServer', 'correlationId'];
+  for (const field of required) {
+    if (!context[field]) {
+      throw new Error(`Missing required emitter context field: ${field}`);
+    }
+  }
+
+  if (outcome.status !== 'success' && outcome.status !== 'failure') {
+    throw new Error(`Invalid session.end status: "${outcome.status}". Must be "success" or "failure".`);
+  }
+
+  const metadata = {
+    completion_reason: outcome.completionReason || (outcome.status === 'success' ? 'task_complete' : 'error'),
+    duration_ms: outcome.sessionStartTime != null ? (Date.now() - outcome.sessionStartTime) : null
+  };
+  if (outcome.outcomeSummary) {
+    metadata.outcome_summary = String(outcome.outcomeSummary).slice(0, 500);
+  }
+  if (outcome.status === 'failure' && outcome.failureReason) {
+    metadata.failure_reason = String(outcome.failureReason).slice(0, 500);
+  }
+  if (context.initiatingContext) {
+    metadata.initiating_context = context.initiatingContext;
+  }
+
+  return {
+    schema_version: SCHEMA_VERSION,
+    event_id: randomUUID(),
+    event_type: 'session.end',
+    timestamp: new Date().toISOString(),
+    platform: PLATFORM,
+    project_id: context.projectId,
+    agent_id: context.agentId,
+    mcp_server: context.mcpServer,
+    action: 'mcp_session_close',
+    status: outcome.status,
+    correlation_id: context.correlationId,
+    metadata
+  };
+}
+
+
+/**
  * Builds a schema-conforming tool.invocation audit event.
  *
  * Required context fields:
@@ -74,4 +174,4 @@ function buildToolInvocationEvent(context, outcome) {
   };
 }
 
-module.exports = { buildToolInvocationEvent };
+module.exports = { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent };
