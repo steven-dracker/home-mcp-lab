@@ -3,6 +3,18 @@
 A home lab platform for building, operating, and auditing MCP (Model Context Protocol) servers — with compliance visibility, structured controls, and pluggable project integration.
 
 ---
+## Lab Environment Disclosure
+
+This repository documents a personal home lab used for experimentation with MCP (Model Context Protocol) servers, observability, and compliance workflows.
+
+All infrastructure details (hostnames, IP addresses, network topology) are:
+- Non-production
+- Non-publicly routable (private LAN and mesh VPN only)
+- Used strictly for local testing and architectural development
+
+No secrets, credentials, or sensitive access mechanisms are stored in this repository.
+
+Any references to infrastructure are included for architectural clarity and reproducibility of the lab environment, not as deployable or externally accessible systems.
 
 ## Purpose
 
