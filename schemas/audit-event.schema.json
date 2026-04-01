@@ -2,8 +2,8 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "home-mcp-lab/audit-event",
   "title": "Home MCP Compliance Lab — Audit Event Schema",
-  "description": "Platform-level audit event schema for MCP tool invocations and runtime secret retrieval. Version 0 foundation. All events emitted by platform-managed services must conform to this structure. Secret values must never appear in any field.",
-  "schema_version": "0.1.0",
+  "description": "Platform-level audit event schema for MCP tool invocations, runtime secret retrieval, and session lifecycle events. All events emitted by platform-managed services must conform to this structure. Secret values must never appear in any field.",
+  "schema_version": "0.2.0",
 
   "type": "object",
   "required": [
@@ -38,7 +38,7 @@
     "event_type": {
       "type": "string",
       "description": "Categorizes the event. See defined event types below.",
-      "enum": ["tool.invocation", "secret.retrieval"],
+      "enum": ["tool.invocation", "secret.retrieval", "session.start", "session.end"],
       "example": "tool.invocation"
     },
 
@@ -121,6 +121,26 @@
         "retrieval_mechanism": "string — identifier of the tool or method used (e.g., 'keeper-commander')",
         "failure_reason": "string — present only on failure; non-sensitive description of why retrieval failed"
       }
+    },
+
+    "event_type.session.start": {
+      "description": "Emitted by an agent or instrumentation layer when an MCP session is initiated. This event establishes the correlation_id that must be propagated through all subsequent events in the session. Must be emitted before any tool calls are made. The action field should describe the session initiation (e.g., 'mcp_session_init').",
+      "correlation_role": "session.start is the origin point for the correlation_id lifecycle. The correlation_id set here must appear in all tool.invocation, secret.retrieval, and session.end events for the same session.",
+      "metadata_fields": {
+        "session_type": "string — describes the nature of the session (e.g., 'interactive', 'automated', 'ci'); non-sensitive",
+        "execution_mode": "string — describes how the agent is running (e.g., 'claude-code-interactive', 'unattended-service'); non-sensitive",
+        "initiating_context": "string — non-sensitive description of what triggered the session (e.g., a CC-HMCP prompt ID, a workflow name, or a scheduled task identifier)"
+      }
+    },
+
+    "event_type.session.end": {
+      "description": "Emitted by an agent or instrumentation layer when an MCP session concludes, whether successfully or due to error. Must use the same correlation_id as the corresponding session.start event. If session.end is never received after session.start, the platform treats the session as abnormally terminated. The action field should describe the session termination (e.g., 'mcp_session_close').",
+      "correlation_role": "session.end closes the correlation scope. All tool.invocation and secret.retrieval events with this correlation_id occurred within this session boundary.",
+      "metadata_fields": {
+        "completion_reason": "string — non-sensitive description of why the session ended (e.g., 'user_exit', 'task_complete', 'error', 'timeout')",
+        "duration_ms": "number — total session duration in milliseconds, calculated from session.start timestamp",
+        "outcome_summary": "string — non-sensitive high-level summary of what the session accomplished (e.g., 'completed CC-HMCP-000003B schema extension')"
+      }
     }
 
   },
@@ -136,7 +156,7 @@
   "examples": [
     {
       "_description": "tool.invocation — successful read_file call",
-      "schema_version": "0.1.0",
+      "schema_version": "0.2.0",
       "event_id": "a3f7c12e-4b91-4d2a-9f0e-1c8d6e3b2a57",
       "event_type": "tool.invocation",
       "timestamp": "2026-03-31T14:00:00Z",
@@ -156,7 +176,7 @@
     },
     {
       "_description": "secret.retrieval — non-interactive Keeper retrieval failure",
-      "schema_version": "0.1.0",
+      "schema_version": "0.2.0",
       "event_id": "b9e21d3a-7c04-4f88-ae12-3d5f0c9b1e84",
       "event_type": "secret.retrieval",
       "timestamp": "2026-03-31T14:01:30Z",
@@ -173,6 +193,44 @@
         "environment_context": "service",
         "retrieval_mechanism": "keeper-commander",
         "failure_reason": "Session token not present in service execution context"
+      }
+    },
+    {
+      "_description": "session.start — agent initiates MCP session for an interactive Claude Code task",
+      "schema_version": "0.2.0",
+      "event_id": "c4a83e21-9f12-4b7d-8e05-2d6c1a0b9f73",
+      "event_type": "session.start",
+      "timestamp": "2026-03-31T14:00:00Z",
+      "platform": "home-mcp-lab",
+      "project_id": "home-mcp-lab",
+      "agent_id": "claude-code-session-dude-mcp-01",
+      "mcp_server": "github-mcp-server",
+      "action": "mcp_session_init",
+      "status": "success",
+      "correlation_id": "sess-20260331-cc-hmcp-000003b",
+      "metadata": {
+        "session_type": "interactive",
+        "execution_mode": "claude-code-interactive",
+        "initiating_context": "CC-HMCP-000003B"
+      }
+    },
+    {
+      "_description": "session.end — agent closes MCP session after completing task",
+      "schema_version": "0.2.0",
+      "event_id": "d7b94f05-2e38-4c91-a016-5f8d3b2e1c47",
+      "event_type": "session.end",
+      "timestamp": "2026-03-31T14:22:15Z",
+      "platform": "home-mcp-lab",
+      "project_id": "home-mcp-lab",
+      "agent_id": "claude-code-session-dude-mcp-01",
+      "mcp_server": "github-mcp-server",
+      "action": "mcp_session_close",
+      "status": "success",
+      "correlation_id": "sess-20260331-cc-hmcp-000003b",
+      "metadata": {
+        "completion_reason": "task_complete",
+        "duration_ms": 1335000,
+        "outcome_summary": "Completed CC-HMCP-000003B schema extension, committed and pushed feature branch"
       }
     }
   ]
