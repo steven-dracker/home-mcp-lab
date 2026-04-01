@@ -7,8 +7,11 @@
  * Emits tool.invocation audit events at tool call completion boundaries.
  *
  * Public API:
- *   emitToolInvocation(context, outcome)   — emit a single event (fire-and-forget)
+ *   withSession(baseContext, fn)           — run fn in a managed session; emits session.start and session.end
+ *   emitToolInvocation(context, outcome)   — emit a single tool.invocation event (fire-and-forget)
  *   withToolInstrumentation(context, fn)   — wrap an async tool call with instrumentation
+ *   emitSessionStart(context)              — emit session.start directly; returns correlationId
+ *   emitSessionEnd(context, outcome)       — emit session.end directly
  *
  * Context shape:
  *   toolName           string  required  — MCP tool name (e.g. "create_issue")
@@ -23,7 +26,7 @@
  */
 
 const { randomUUID } = require('crypto');
-const { buildToolInvocationEvent } = require('./event-builder');
+const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent } = require('./event-builder');
 const { submit } = require('./transport');
 const { record } = require('./failure-observer');
 
@@ -121,4 +124,104 @@ function classifyFailure(err) {
   return msg.slice(0, 300) || 'unknown_failure';
 }
 
-module.exports = { emitToolInvocation, withToolInstrumentation };
+/**
+ * Emit a session.start event.
+ * Never throws — emission failures are handled by the failure observer.
+ *
+ * Returns the correlationId used, so callers can propagate it to tool calls.
+ */
+function emitSessionStart(context) {
+  try {
+    const resolvedContext = {
+      ...context,
+      correlationId: context.correlationId || generateCorrelationId()
+    };
+    const event = buildSessionStartEvent(resolvedContext);
+    submit(event);
+    return resolvedContext.correlationId;
+  } catch (err) {
+    record(err, { event_type: 'session.start', projectId: context.projectId });
+    // Return a generated ID so session can continue even if emission failed.
+    return context.correlationId || generateCorrelationId();
+  }
+}
+
+/**
+ * Emit a session.end event.
+ * Never throws — emission failures are handled by the failure observer.
+ *
+ * outcome shape:
+ *   status             'success' | 'failure'  required
+ *   sessionStartTime   number                 required — ms since epoch from session start
+ *   completionReason   string                 optional
+ *   outcomeSummary     string                 optional
+ *   failureReason      string                 required when status is 'failure'
+ */
+function emitSessionEnd(context, outcome) {
+  try {
+    const event = buildSessionEndEvent(context, outcome);
+    submit(event);
+  } catch (err) {
+    record(err, { event_type: 'session.end', correlationId: context.correlationId });
+  }
+}
+
+/**
+ * Run an async function within a managed session.
+ *
+ * Emits session.start before calling fn, injects correlationId into every
+ * withToolInstrumentation call inside fn, and emits session.end after fn
+ * completes — whether it succeeds or throws.
+ *
+ * session.end emits status:'failure' if fn throws; status:'success' otherwise.
+ * The original error is always re-thrown after session.end is emitted.
+ *
+ * baseContext shape — same as tool emitter context minus toolName/correlationId:
+ *   projectId          string  required
+ *   agentId            string  required
+ *   mcpServer          string  required
+ *   initiatingContext  string  optional
+ *   sessionType        string  optional  — default 'interactive'
+ *   executionMode      string  optional  — default 'agent-mediated'
+ *
+ * fn receives (sessionContext) — a context object with correlationId populated,
+ * suitable for passing directly to withToolInstrumentation or emitToolInvocation.
+ *
+ * Example:
+ *   await withSession(
+ *     { projectId: 'home-mcp-lab', agentId: 'claude-code-1',
+ *       mcpServer: 'github-mcp-server', initiatingContext: 'CC-HMCP-000004C' },
+ *     async (sessionCtx) => {
+ *       await withToolInstrumentation({ ...sessionCtx, toolName: 'get_file_contents' }, () => mcp.getFile(...));
+ *       await withToolInstrumentation({ ...sessionCtx, toolName: 'create_issue' }, () => mcp.createIssue(...));
+ *     }
+ *   );
+ */
+async function withSession(baseContext, fn) {
+  const correlationId = emitSessionStart(baseContext);
+  const sessionContext = { ...baseContext, correlationId };
+  const sessionStartTime = Date.now();
+
+  let result;
+  try {
+    result = await fn(sessionContext);
+  } catch (err) {
+    emitSessionEnd(sessionContext, {
+      status: 'failure',
+      sessionStartTime,
+      completionReason: 'error',
+      failureReason: err && err.message ? err.message.slice(0, 300) : 'unknown_error'
+    });
+    throw err;
+  }
+
+  emitSessionEnd(sessionContext, {
+    status: 'success',
+    sessionStartTime,
+    completionReason: 'task_complete'
+  });
+
+  return result;
+}
+
+module.exports = { emitToolInvocation, withToolInstrumentation, emitSessionStart, emitSessionEnd, withSession };
