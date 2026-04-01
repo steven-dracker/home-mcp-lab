@@ -24,3 +24,6 @@ __pycache__/
 # Temporary files
 *.tmp
 *.swp
+
+# Runtime audit log (local Phase 2 transport — not committed)
+audit-log/
