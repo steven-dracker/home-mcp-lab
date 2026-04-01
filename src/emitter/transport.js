@@ -11,6 +11,11 @@ const { record } = require('./failure-observer');
 const INGESTION_URL = process.env.EVENT_INGESTION_URL || null;
 const REQUEST_TIMEOUT_MS = 5000;
 
+// Retry policy — applies to HTTP delivery only.
+// Total delivery attempts = MAX_ATTEMPTS (1 initial + MAX_ATTEMPTS-1 retries).
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 500;
+
 // JSONL fallback — used when INGESTION_URL is not configured.
 const AUDIT_LOG_DIR = path.join(__dirname, '..', '..', 'audit-log');
 const AUDIT_LOG_FILE = path.join(AUDIT_LOG_DIR, 'tool-invocations.jsonl');
@@ -21,23 +26,26 @@ const AUDIT_LOG_FILE = path.join(AUDIT_LOG_DIR, 'tool-invocations.jsonl');
  * Submit a validated audit event to the configured ingestion target.
  *
  * When EVENT_INGESTION_URL is set:
- *   HTTP POST the event as JSON. Delivery is async and non-blocking.
- *   The function returns before the request completes.
- *   Delivery failures are observed via the failure observer — they do not
- *   propagate to the caller.
+ *   HTTP POST the event as JSON with bounded retry on transient failures.
+ *   Delivery is async and non-blocking — the function returns before the
+ *   first attempt completes. Retries and final failure are observed via
+ *   the failure observer. They do not propagate to the caller.
+ *
+ *   Retry policy:
+ *     - Max 3 attempts (1 initial + 2 retries)
+ *     - Fixed 500ms delay between attempts
+ *     - Retry-eligible: network errors, timeouts, HTTP 5xx
+ *     - Non-retryable: HTTP 4xx (permanent client error)
  *
  * When EVENT_INGESTION_URL is not set (fallback):
- *   Append the event to the local JSONL file. This is synchronous.
+ *   Append the event to the local JSONL file. Synchronous.
  *   I/O failures are thrown to the caller so the emitter can observe them.
- *
- * Throws synchronously only for events that cannot be serialized (should not
- * happen in practice given validated event objects from event-builder.js).
  */
 function submit(event) {
   const payload = JSON.stringify(event);
 
   if (INGESTION_URL) {
-    _postAsync(payload, event.event_id);
+    _postWithRetry(payload, event.event_id);
     // Returns immediately — delivery happens asynchronously.
     return;
   }
@@ -52,23 +60,51 @@ function submit(event) {
 // ── Internal ─────────────────────────────────────────────────────────────────
 
 /**
- * Fire-and-forget HTTP POST. All delivery failures are observed locally.
- * Never throws or rejects to the caller.
+ * Async bounded retry loop. Fires and forgets from the caller's perspective.
+ * On final failure, records via failure-observer.
  */
-function _postAsync(payload, eventId) {
-  _post(payload)
-    .catch(err => {
-      record(err, {
-        transport: 'http',
-        event_id: eventId,
-        endpoint: INGESTION_URL
-      });
+function _postWithRetry(payload, eventId) {
+  _attemptDelivery(payload, eventId, 1);
+}
+
+async function _attemptDelivery(payload, eventId, attempt) {
+  let statusCode;
+  try {
+    statusCode = await _post(payload);
+    // Delivered successfully on attempt N.
+    if (attempt > 1) {
+      // Log recovery only when a retry was needed — keeps success path silent.
+      process.stderr.write(
+        `[emitter-retry-success] event_id=${eventId} delivered on attempt ${attempt}\n`
+      );
+    }
+    return;
+  } catch (err) {
+    const retryable = _isRetryable(err);
+
+    if (retryable && attempt < MAX_ATTEMPTS) {
+      process.stderr.write(
+        `[emitter-retry] event_id=${eventId} attempt=${attempt} error=${err.message} retrying_in=${RETRY_DELAY_MS}ms\n`
+      );
+      await _sleep(RETRY_DELAY_MS);
+      return _attemptDelivery(payload, eventId, attempt + 1);
+    }
+
+    // Non-retryable error, or retry budget exhausted.
+    record(err, {
+      transport: 'http',
+      event_id: eventId,
+      endpoint: INGESTION_URL,
+      attempts: attempt,
+      retryable
     });
+  }
 }
 
 /**
- * HTTP POST with timeout. Returns a Promise that resolves on 2xx
- * and rejects on non-2xx, network error, or timeout.
+ * Single HTTP POST attempt with timeout.
+ * Resolves with HTTP status code on 2xx.
+ * Rejects with a classified error on non-2xx, network failure, or timeout.
  */
 function _post(payload) {
   return new Promise((resolve, reject) => {
@@ -89,12 +125,19 @@ function _post(payload) {
         timeout: REQUEST_TIMEOUT_MS
       },
       (res) => {
-        // Drain the response body so the socket is released.
         res.resume();
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.statusCode);
+        } else if (res.statusCode >= 500) {
+          const err = new Error(`server_error: HTTP ${res.statusCode}`);
+          err.httpStatus = res.statusCode;
+          reject(err);
         } else {
-          reject(new Error(`ingestion_endpoint_rejected: HTTP ${res.statusCode}`));
+          // 4xx — permanent client error, do not retry.
+          const err = new Error(`client_error: HTTP ${res.statusCode}`);
+          err.httpStatus = res.statusCode;
+          err.permanent = true;
+          reject(err);
         }
       }
     );
@@ -111,6 +154,21 @@ function _post(payload) {
     req.write(body);
     req.end();
   });
+}
+
+/**
+ * Returns true if the error warrants a retry attempt.
+ * Network errors, timeouts, and server-side 5xx are retryable.
+ * Client errors (4xx) and explicitly flagged permanent errors are not.
+ */
+function _isRetryable(err) {
+  if (err.permanent) return false;
+  if (err.httpStatus && err.httpStatus >= 400 && err.httpStatus < 500) return false;
+  return true;
+}
+
+function _sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 module.exports = { submit, AUDIT_LOG_FILE, INGESTION_URL };
