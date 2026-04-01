@@ -7,6 +7,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "demo": "node src/emitter/demo.js"
+    "demo": "node src/emitter/demo.js",
+    "demo:session": "node src/emitter/demo-session.js",
+    "demo:github": "MCP_TRANSPORT=demo node src/mcp-client/demo-github-session.js",
+    "validate": "node tests/validate-mcp-transport.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }
