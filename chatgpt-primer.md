@@ -227,6 +227,73 @@ schemas/            Canonical event and data schemas
 
 ---
 
+## WORKFLOW MODEL
+
+---
+
+### Roles
+
+| Role | Party | Responsibilities |
+|---|---|---|
+| Architect / Scope Enforcer | ChatGPT | Generate prompts, review summaries, generate PR text, maintain platform discipline |
+| Executor / Repo Modifier | Claude Code | Execute prompts, commit changes, generate handoffs |
+| Operator / Controller | User | Run prompts, return summaries, approve PRs, trigger session boundaries |
+
+---
+
+### Standard Execution Loop
+
+Prompt → Execute → Summary → Review → PR → Merge → Handoff → Stop
+
+1. ChatGPT generates a scoped Claude Code prompt
+2. User runs the prompt in Claude Code
+3. Claude Code returns a structured execution summary
+4. User returns the summary to ChatGPT
+5. ChatGPT reviews the summary and generates PR title + description
+6. User opens and merges the PR
+7. Claude Code generates a handoff if a session boundary is reached
+8. ChatGPT and Claude Code stop; operator controls when to continue
+
+---
+
+### PR Timing Rule
+
+- PR title and description are generated **after** the execution summary is returned
+- PR text is **not** generated as part of the initial Claude Code prompt by default
+- ChatGPT waits for Claude Code's branch name, commit hash, and summary before drafting PR text
+
+---
+
+### Handoff Model
+
+- Handoffs are the persistent state layer for session continuity
+- Claude Code generates handoffs using `docs/handoffs/HANDOFF-TEMPLATE.md`
+- ChatGPT consumes handoffs at the start of a new session to restore context
+- Handoffs carry dynamic state: last task, open gaps, active branches, next task
+- Primer files carry stable behavioral rules — they are not dynamic state trackers
+
+---
+
+### Session Boundary Discipline
+
+Prefer creating a handoff when:
+- A logical unit of work is complete (PR merged)
+- Context is running low (approximately 30% remaining)
+- A natural pause point is reached
+
+Do not continue to the next task across a session boundary without a handoff.
+
+---
+
+### Resume Pattern
+
+- Start new session: paste `chatgpt-primer.md` into ChatGPT
+- Paste the latest handoff from `docs/handoffs/`
+- ChatGPT restores context from the handoff — no re-explanation of the full project needed
+- Handoff is the source of truth for dynamic state; primer is the source of truth for behavioral rules
+
+---
+
 ## BACKLOG SNAPSHOT
 
 ### To-Do

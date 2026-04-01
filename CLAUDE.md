@@ -364,3 +364,36 @@ If Claude is unsure whether an action is in scope:
 Do NOT guess or expand scope.
 
 ---
+
+### 12. Handoff Behavior
+
+When asked to prepare a session handoff:
+
+- Use the canonical template at `docs/handoffs/HANDOFF-TEMPLATE.md`
+- Output to `docs/handoffs/handoff-<prompt-id>.md`
+- Handoffs carry dynamic state (last task, open gaps, next task, active branches)
+- Keep handoffs concise and source-of-truth oriented — no prose, no duplication of architecture content
+- Handoffs are the persistent continuity layer between sessions; treat them as authoritative
+
+---
+
+### 13. Interruption Recovery
+
+If a prompt is resumed after an interruption:
+
+- Inspect current repo state first (branch, uncommitted files, last commit)
+- Determine what was completed before the interruption
+- Continue or restart cleanly without duplicating work
+- Prefer full prompt context over partial continuation guesses
+- If state is ambiguous, report it and ask before proceeding
+
+---
+
+### 14. PR Workflow Awareness
+
+- Claude Code is responsible for execution and accurate state reporting
+- Do NOT generate PR title or description unless explicitly requested in the prompt
+- After execution, report branch name and commit hash so the operator can open the PR
+- PR text generation is a separate step, typically done after the execution summary is reviewed
+
+---
