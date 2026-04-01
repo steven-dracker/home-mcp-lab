@@ -1,0 +1,12 @@
+{
+  "name": "home-mcp-lab",
+  "version": "0.1.0",
+  "description": "Home MCP Compliance Lab — platform emitter",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "demo": "node src/emitter/demo.js"
+  }
+}
