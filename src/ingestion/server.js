@@ -1,11 +1,14 @@
 'use strict';
 
 /**
- * Phase 2 ingestion boundary — HTTP server with persistence and readback.
+ * Phase 2 ingestion boundary — HTTP server with persistence, readback, and deduplication.
  *
  * Routes:
  *   POST /events          Accept and persist a single audit event.
- *                         Returns 200 only after the event is durably written.
+ *                         Deduplicates by event_id: if the event_id has already been
+ *                         persisted, returns 200 with {"accepted":false,"duplicate":true}
+ *                         and does not write again.
+ *                         Returns 200 {"accepted":true} only after the event is durably written.
  *                         Returns 500 if persistence fails.
  *
  *   GET  /events          Read back persisted events.
@@ -15,6 +18,11 @@
  *                           limit           — max events to return (default: 100, max: 1000)
  *                         If the store file does not exist, returns {"events":[],"count":0}.
  *                         If the store file cannot be read, returns 500.
+ *
+ * Deduplication scope:
+ *   The seen-event_id set is populated at startup from the store file and updated
+ *   on every successful write. Duplicates from before a server restart are also
+ *   detected. Events without an event_id field are accepted without dedup.
  *
  * Storage:
  *   ingestion-store/events.jsonl  — append-only; one JSON event per line.
@@ -40,13 +48,36 @@ const STORE_FILE = path.join(STORE_DIR, 'events.jsonl');
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 
+// In-memory deduplication set — populated from store at startup.
+const seenEventIds = new Set();
+
 let receivedCount = 0;
 let persistedCount = 0;
+let duplicateCount = 0;
 
-// Ensure the storage directory exists at startup.
+// ── Startup ──────────────────────────────────────────────────────────────────
+
+// Ensure the storage directory exists.
 if (!fs.existsSync(STORE_DIR)) {
   fs.mkdirSync(STORE_DIR, { recursive: true });
 }
+
+// Populate seen set from existing store so dedup survives server restarts.
+if (fs.existsSync(STORE_FILE)) {
+  const lines = fs.readFileSync(STORE_FILE, 'utf8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line);
+      if (event.event_id) seenEventIds.add(event.event_id);
+    } catch {
+      // Skip malformed lines — do not prevent startup.
+    }
+  }
+  console.log(`Loaded ${seenEventIds.size} known event_ids from store.`);
+}
+
+// ── Server ───────────────────────────────────────────────────────────────────
 
 const server = http.createServer((req, res) => {
   const reqUrl = new URL(req.url, `http://localhost:${PORT}`);
@@ -92,9 +123,20 @@ function handlePost(req, res) {
 
     receivedCount++;
 
+    // Deduplication — only when event_id is present.
+    if (event.event_id && seenEventIds.has(event.event_id)) {
+      duplicateCount++;
+      console.log(`[${new Date().toISOString()}] duplicate event_id=${event.event_id} (suppressed; total duplicates: ${duplicateCount})`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ accepted: false, duplicate: true, event_id: event.event_id }));
+      return;
+    }
+
+    // Persist before responding — 200 means durably written.
     try {
       fs.appendFileSync(STORE_FILE, raw + '\n', 'utf8');
       persistedCount++;
+      if (event.event_id) seenEventIds.add(event.event_id);
     } catch (err) {
       console.error(`[${new Date().toISOString()}] persistence_failure event_id=${event.event_id || 'unknown'} error=${err.message}`);
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -123,7 +165,6 @@ function handleGet(reqUrl, res) {
   const limitParam = parseInt(reqUrl.searchParams.get('limit') || String(DEFAULT_LIMIT), 10);
   const limit = isNaN(limitParam) || limitParam < 1 ? DEFAULT_LIMIT : Math.min(limitParam, MAX_LIMIT);
 
-  // File not present — valid empty state (server running, no events received yet).
   if (!fs.existsSync(STORE_FILE)) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ events: [], count: 0 }));
@@ -148,7 +189,6 @@ function handleGet(reqUrl, res) {
     try {
       event = JSON.parse(line);
     } catch {
-      // Skip malformed lines — do not crash or reject the response.
       continue;
     }
 
