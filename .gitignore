@@ -25,5 +25,8 @@ __pycache__/
 *.tmp
 *.swp
 
-# Runtime audit log (local Phase 2 transport — not committed)
+# Runtime audit log (emitter-side JSONL fallback — not committed)
 audit-log/
+
+# Ingestion boundary persistence store (server-side — not committed)
+ingestion-store/
