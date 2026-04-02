@@ -1,7 +1,8 @@
 # VG-HMCP-000002 — MCP Tool Invocation Visibility Gap
 
-**Status:** Open  
+**Status:** Closed  
 **Date:** 2026-03-31  
+**Closed:** 2026-04-02 (CC-HMCP-000005D)  
 **Related Prompt:** CC-HMCP-000002C  
 **Source Integration:** CC-HMCP-000002B — GitHub MCP Integration Assessment  
 
@@ -22,7 +23,29 @@ The platform has no visibility into MCP tool invocations at runtime. When an age
 
 ---
 
-## Current State
+## Closure Evidence (CC-HMCP-000005D — 2026-04-02)
+
+Live validation confirmed end-to-end `tool.invocation` event emission and ingestion:
+
+- **Session:** correlation_id `sess-20260402-fa14ce77`
+- **MCP server:** `@modelcontextprotocol/server-github` (npm, v2025.4.8) via stdio
+- **PAT:** real GitHub PAT (not stored)
+- **Tool calls made:**
+  - `search_repositories` — status: success, duration: 392ms, result: 3 real repos returned
+  - `get_file_contents` — status: success, duration: 114ms, result: README.md content returned
+- **Events ingested (4 total):**
+  - `session.start` — event_id `51965d12-0431-45ad-9af6-869de596e1e5`
+  - `tool.invocation` (search_repositories) — event_id `629a0af2-276f-4802-b339-f2882cac9e6f`, status: success
+  - `tool.invocation` (get_file_contents) — event_id `11cb164f-4f01-47d7-9c24-964a6e5d6a2f`, status: success
+  - `session.end` — event_id `d4cc5ee7-9b19-4d4d-876a-fa960042132a`, duration_ms: 1488
+- **Schema:** v0.2.0, all events carry correlation_id, agent_id, project_id, mcp_server, initiating_context
+- **Ingestion path:** HTTP delivery to `POST /events`, deduplication by event_id, persisted to JSONL
+
+The platform now has full visibility into MCP tool invocations. The instrumentation layer is `session-runner.js` wrapping `withToolInstrumentation` from the emitter.
+
+---
+
+## Prior State (original, retained for history)
 
 - The GitHub MCP server is connected on dude-mcp-01 and is actively used by Claude Code sessions
 - Tool calls (file reads, PR creation, issue management, etc.) execute successfully
