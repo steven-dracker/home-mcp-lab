@@ -1,7 +1,8 @@
 # VG-HMCP-000003 — Secret Retrieval Path Visibility Gap (GitHub PAT)
 
-**Status:** Open  
+**Status:** Narrowed  
 **Date:** 2026-03-31  
+**Narrowed:** 2026-04-02 (CC-HMCP-000006A)  
 **Related Prompt:** CC-HMCP-000002C  
 **Source Integration:** CC-HMCP-000002B — GitHub MCP Integration Assessment  
 
@@ -21,7 +22,33 @@ The platform cannot confirm how the GitHub MCP server obtains its authentication
 
 ---
 
-## Current State
+## Narrowed State (CC-HMCP-000006A — 2026-04-02)
+
+The retrieval path is now defined, implemented, and documented. The following is resolved:
+
+**What was resolved:**
+- The retrieval mechanism is now documented: `scripts/get-github-pat.sh` defines the priority chain
+  (pass-through → Keeper Commander → gh CLI fallback)
+- The injection pattern is defined: `scripts/run-with-github-pat.sh` injects at the process boundary;
+  PAT is never written to files, logs, or child-process stdout
+- PAT hygiene is validated: no-leakage test passed; PAT value confirmed absent from all output streams
+- CTRL-HMCP-000001 compliance: the platform-approved retrieval path now exists and is documented
+- Host prerequisites and Keeper setup are documented in `docs/runbooks/keeper-noninteractive-setup.md`
+
+**What remains open:**
+1. **Keeper service-context viability not confirmed on dude-mcp-01** — the Keeper path logic is implemented
+   and correct, but Keeper is not installed on the dev machine. Live execution of the Keeper code path
+   requires SSH or direct access to dude-mcp-01. This is the same blocker as VG-HMCP-000001.
+2. **No `secret.retrieval` audit event emitted** — the schema supports `secret.retrieval` (v0.2.0),
+   but the emitter has no `emitSecretRetrieval` function and the retrieval scripts do not emit events.
+   PAT access is still unobservable at the audit level. This is the primary remaining gap.
+
+**Exact remaining blocker:** No `secret.retrieval` events are emitted when the PAT is retrieved.
+Until these events are wired, credential access remains invisible to the platform audit log.
+
+---
+
+## Prior State (original, retained for history)
 
 - The GitHub MCP server authenticates to the GitHub API using a personal access token
 - The server connects successfully on dude-mcp-01, indicating the PAT is accessible at runtime
