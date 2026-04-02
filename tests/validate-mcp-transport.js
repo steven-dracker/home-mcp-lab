@@ -226,6 +226,132 @@ async function test(name, fn) {
     await t.close(); // safe on unconnected
   });
 
+  // ── 5. Tool selector ─────────────────────────────────────────────────────
+
+  console.log('\n5. Tool selector');
+
+  const { selectIdentityProbe, selectSearchProbe, classifyToolResult, isMutationTool } =
+    require('../src/mcp-client/tool-selector');
+
+  // Helper: build a minimal tool descriptor
+  const tool = (name, required = []) => ({ name, inputSchema: { required } });
+
+  await test('selectIdentityProbe: prefers get_me when present', async () => {
+    const tools = [
+      tool('add_comment_to_pending_review', []),
+      tool('search_repositories', []),
+      tool('get_me', []),
+      tool('list_issues', ['owner', 'repo'])
+    ];
+    assert.strictEqual(selectIdentityProbe(tools), 'get_me');
+  });
+
+  await test('selectIdentityProbe: uses preference-list fallback when get_me absent', async () => {
+    const tools = [
+      tool('search_repositories', []),
+      tool('get_teams', []),
+      tool('list_issues', ['owner', 'repo'])
+    ];
+    assert.strictEqual(selectIdentityProbe(tools), 'get_teams');
+  });
+
+  await test('selectIdentityProbe: never selects a mutation tool', async () => {
+    // Only mutation tools + one search tool available — should return null or search
+    const tools = [
+      tool('create_issue', ['owner', 'repo', 'title']),
+      tool('delete_branch', ['owner', 'repo', 'branch']),
+      tool('add_comment_to_pending_review', []),
+      tool('update_pull_request', ['owner', 'repo']),
+      tool('search_repositories', [])  // search goes to searchProbe, not identityProbe
+    ];
+    const result = selectIdentityProbe(tools);
+    // search_repositories is in SEARCH_PROBE_PREFERENCE, so selectIdentityProbe skips it
+    assert.strictEqual(result, null, 'Expected null when only mutation or search tools available');
+  });
+
+  await test('selectIdentityProbe: returns null when no safe tool exists', async () => {
+    const tools = [
+      tool('create_issue', ['owner', 'repo', 'title']),
+      tool('delete_branch', ['owner', 'repo'])
+    ];
+    assert.strictEqual(selectIdentityProbe(tools), null);
+  });
+
+  await test('selectSearchProbe: prefers search_repositories', async () => {
+    const tools = [
+      tool('list_repos', []),
+      tool('search_repositories', ['query']),
+      tool('get_me', [])
+    ];
+    assert.strictEqual(selectSearchProbe(tools), 'search_repositories');
+  });
+
+  await test('selectSearchProbe: falls back to list_ tool when search_repositories absent', async () => {
+    const tools = [
+      tool('get_me', []),
+      tool('list_issues', ['owner', 'repo']),
+      tool('list_repositories', [])
+    ];
+    assert.strictEqual(selectSearchProbe(tools), 'list_repositories');
+  });
+
+  await test('isMutationTool: identifies mutation tools correctly', async () => {
+    assert.strictEqual(isMutationTool('create_issue'), true);
+    assert.strictEqual(isMutationTool('delete_branch'), true);
+    assert.strictEqual(isMutationTool('add_comment_to_pending_review'), true);
+    assert.strictEqual(isMutationTool('update_pull_request'), true);
+    assert.strictEqual(isMutationTool('get_me'), false);
+    assert.strictEqual(isMutationTool('search_repositories'), false);
+    assert.strictEqual(isMutationTool('list_issues'), false);
+  });
+
+  // ── 6. Tool result classification ─────────────────────────────────────────
+
+  console.log('\n6. Tool result classification');
+
+  await test('classifyToolResult: success on valid data', async () => {
+    assert.strictEqual(
+      classifyToolResult({ login: 'drake', id: 123 }, null),
+      'success'
+    );
+  });
+
+  await test('classifyToolResult: auth_failure on 401 response content', async () => {
+    assert.strictEqual(
+      classifyToolResult({ content: [{ text: 'HTTP 401: Bad credentials' }] }, null),
+      'auth_failure'
+    );
+  });
+
+  await test('classifyToolResult: auth_failure on "Unauthorized" in result', async () => {
+    assert.strictEqual(
+      classifyToolResult({ error: 'Unauthorized — check your token' }, null),
+      'auth_failure'
+    );
+  });
+
+  await test('classifyToolResult: auth_failure on 403 forbidden', async () => {
+    assert.strictEqual(
+      classifyToolResult({ message: '403 Forbidden' }, null),
+      'auth_failure'
+    );
+  });
+
+  await test('classifyToolResult: mcp_error when err is thrown', async () => {
+    assert.strictEqual(
+      classifyToolResult(null, new Error('ECONNREFUSED')),
+      'mcp_error'
+    );
+  });
+
+  await test('classifyToolResult: mcp_error takes priority over result content', async () => {
+    // Even if result has auth-like text, a thrown error is always mcp_error
+    assert.strictEqual(
+      classifyToolResult({ message: '401' }, new Error('transport closed')),
+      'mcp_error'
+    );
+  });
+
   // ── Summary ───────────────────────────────────────────────────────────────
 
   const bar = '─'.repeat(40);

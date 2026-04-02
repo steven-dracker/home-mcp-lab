@@ -13,13 +13,14 @@
 //   Connection lifecycle to stderr
 //
 // Flags:
-//   --probe   Run a quick test tool call (uses first available tool with no required args)
+//   --probe   Run the identity probe tool (get_me or safe fallback)
 //   --json    Output tools as JSON array (default: human-readable table)
 
 const path = require('path');
 const { Client } = require('@modelcontextprotocol/sdk/client');
 const _sdkClientDir = path.dirname(require.resolve('@modelcontextprotocol/sdk/client'));
 const { StdioClientTransport } = require(path.join(_sdkClientDir, 'stdio'));
+const { selectIdentityProbe, classifyToolResult } = require('./tool-selector');
 
 const COMMAND = process.env.GITHUB_MCP_COMMAND || 'docker';
 const ARGS = process.env.GITHUB_MCP_ARGS
@@ -58,23 +59,38 @@ async function main() {
     }
 
     if (doProbe) {
-      // Find a tool with no required args to call as a connection probe.
-      const probeTarget = tools.find(t =>
-        !t.inputSchema || !t.inputSchema.required || t.inputSchema.required.length === 0
-      );
-      if (probeTarget) {
-        process.stderr.write(`[discover] Probing tool: ${probeTarget.name}\n`);
-        try {
-          const result = await client.callTool({ name: probeTarget.name, arguments: {} });
-          const summary = JSON.stringify(result).slice(0, 200);
-          process.stderr.write(`[discover] Probe success: ${summary}\n`);
-          console.log(`\nProbe result (${probeTarget.name}):`);
-          console.log(JSON.stringify(result, null, 2));
-        } catch (err) {
-          process.stderr.write(`[discover] Probe failed: ${err.message}\n`);
-        }
+      const probeName = selectIdentityProbe(tools);
+      if (!probeName) {
+        process.stderr.write('[discover] No safe identity probe tool found — cannot probe\n');
+        process.exit(1);
+      }
+
+      process.stderr.write(`[discover] Probing tool: ${probeName}\n`);
+
+      let result = null;
+      let callErr = null;
+      try {
+        result = await client.callTool({ name: probeName, arguments: {} });
+      } catch (err) {
+        callErr = err;
+      }
+
+      const classification = classifyToolResult(result, callErr);
+      process.stderr.write(`[discover] Probe classification: ${classification}\n`);
+
+      if (classification === 'mcp_error') {
+        process.stderr.write(`[discover] MCP transport error: ${callErr.message}\n`);
+        process.exit(1);
+      } else if (classification === 'auth_failure') {
+        const summary = JSON.stringify(result).slice(0, 200);
+        process.stderr.write(`[discover] GitHub API auth failure (MCP session OK): ${summary}\n`);
+        // Exit 2 signals auth failure distinct from MCP failure (exit 1)
+        process.exit(2);
       } else {
-        process.stderr.write('[discover] No zero-arg tool found for probe\n');
+        const summary = JSON.stringify(result).slice(0, 200);
+        process.stderr.write(`[discover] Probe success: ${summary}\n`);
+        console.log(`\nProbe result (${probeName}):`);
+        console.log(JSON.stringify(result, null, 2));
       }
     }
 
