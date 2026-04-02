@@ -1,7 +1,8 @@
 # VG-HMCP-000004 — MCP Session Lifecycle Visibility Gap
 
-**Status:** Open  
+**Status:** Closed  
 **Date:** 2026-03-31  
+**Closed:** 2026-04-02 (CC-HMCP-000005D)  
 **Related Prompt:** CC-HMCP-000002C  
 **Source Integration:** CC-HMCP-000002B — GitHub MCP Integration Assessment  
 
@@ -22,7 +23,28 @@ The platform has no visibility into MCP session lifecycle events — when a sess
 
 ---
 
-## Current State
+## Closure Evidence (CC-HMCP-000005D — 2026-04-02)
+
+Live validation confirmed end-to-end session lifecycle event emission and ingestion:
+
+- **Session:** correlation_id `sess-20260402-fa14ce77`
+- **session.start** — event_id `51965d12-0431-45ad-9af6-869de596e1e5`
+  - timestamp: `2026-04-02T02:02:54.167Z`
+  - agent_id: `cc-hmcp-000005d`, project_id: `home-mcp-lab`, mcp_server: `github-mcp-server`
+  - session_type: `interactive`, execution_mode: `agent-mediated`
+  - initiating_context: `CC-HMCP-000005D`
+- **session.end** — event_id `d4cc5ee7-9b19-4d4d-876a-fa960042132a`
+  - timestamp: `2026-04-02T02:02:55.661Z`
+  - status: `success`, completion_reason: `task_complete`, duration_ms: `1488`
+  - same correlation_id established at session.start
+- **Tool events (2) all share correlation_id** — `sess-20260402-fa14ce77`
+  - Full audit trace is reconstructible by querying `GET /events?correlation_id=sess-20260402-fa14ce77`
+
+The platform now has full visibility into MCP session lifecycle. `withSession` in the emitter establishes the correlation boundary; `session-runner.js` connects this to the MCP transport layer.
+
+---
+
+## Prior State (original, retained for history)
 
 - Claude Code sessions connect to MCP servers on dude-mcp-01 to perform tool calls
 - Sessions begin and end without emitting any platform-observable event
