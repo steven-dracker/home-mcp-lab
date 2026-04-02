@@ -13,7 +13,8 @@
     "discover": "node src/mcp-client/discover-tools.js",
     "resolve-probes": "node src/mcp-client/resolve-probe-tools.js",
     "validate": "node tests/validate-mcp-transport.js",
-    "validate:github": "bash tests/validate-real-github-mcp.sh"
+    "validate:github": "bash tests/validate-real-github-mcp.sh",
+    "validate:github:pat": "bash scripts/run-with-github-pat.sh bash tests/validate-real-github-mcp.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0"
