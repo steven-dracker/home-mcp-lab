@@ -11,6 +11,7 @@
     "demo:session": "node src/emitter/demo-session.js",
     "demo:github": "MCP_TRANSPORT=demo node src/mcp-client/demo-github-session.js",
     "discover": "node src/mcp-client/discover-tools.js",
+    "resolve-probes": "node src/mcp-client/resolve-probe-tools.js",
     "validate": "node tests/validate-mcp-transport.js",
     "validate:github": "bash tests/validate-real-github-mcp.sh"
   },
