@@ -19,11 +19,12 @@ From `bootstrap/project-repo-kit/` in this repo, copy the following into the new
 
 **Required:**
 ```
-chatgpt-primer.template.md  →  chatgpt-primer.md
-boot-block.template.md      →  CLAUDE.md  (or incorporate into existing CLAUDE.md)
-.gitignore.template          →  .gitignore
-.editorconfig                →  .editorconfig
-project-metadata.template.yaml → project-metadata.yaml
+chatgpt-primer.template.md       →  chatgpt-primer.md
+boot-block.template.md           →  CLAUDE.md  (or incorporate into existing CLAUDE.md)
+docs/operator-guide.template.md  →  docs/operator-guide.md  (or Wiki home page)
+.gitignore.template              →  .gitignore
+.editorconfig                    →  .editorconfig
+project-metadata.template.yaml   →  project-metadata.yaml
 ```
 
 **Required directories:**
