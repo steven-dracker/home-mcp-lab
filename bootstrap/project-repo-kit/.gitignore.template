@@ -1,0 +1,74 @@
+# .gitignore — [PROJECT NAME]
+# Conservative vanilla default for MCP-governed project repositories.
+# Adapt as needed for your specific runtime and toolchain.
+
+# ── OS / System ───────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.code-workspace
+
+# ── Environment and Secrets ───────────────────────────────────────────────────
+# Never commit secrets, credentials, or environment-specific values.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Dependency and Build Directories ─────────────────────────────────────────
+node_modules/
+vendor/
+.venv/
+__pycache__/
+*.pyc
+dist/
+build/
+out/
+target/
+.gradle/
+*.egg-info/
+
+# ── Runtime Artifacts ─────────────────────────────────────────────────────────
+*.log
+*.jsonl
+audit-log/
+tmp/
+temp/
+.tmp/
+*.tmp
+
+# ── Test Coverage ─────────────────────────────────────────────────────────────
+coverage/
+.coverage
+.nyc_output/
+
+# ── Package Manager Lock Files (choose your convention) ──────────────────────
+# Uncomment the lock file(s) you do NOT want to commit.
+# Most projects should commit lock files — only exclude if intentional.
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+# Pipfile.lock
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+*.bak
+*.orig
+.cache/
