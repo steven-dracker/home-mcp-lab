@@ -1,0 +1,51 @@
+{
+  "_description": "MCP Node Identity and Configuration Starter — [PROJECT NAME]. Replace all placeholder values before use. Do not commit secrets.",
+
+  "node": {
+    "id": "[project-id]-mcp-node",
+    "display_name": "[Project Name] MCP Node",
+    "version": "0.1.0",
+    "description": "[One-sentence description of what this MCP node does]"
+  },
+
+  "server": {
+    "transport": "[stdio|http]",
+    "runtime": "[node|python|dotnet]",
+    "entry_point": "[path/to/server entrypoint, e.g., src/server.js]",
+    "port": null,
+    "host": null
+  },
+
+  "authentication": {
+    "method": "[none|env-token|keeper-commander|gh-cli|custom]",
+    "secret_identifier": "[non-sensitive reference to the secret, e.g., KEEPER_UID or env var name — never the secret value]",
+    "notes": "Retrieve secrets at runtime only. Never store secret values in this file."
+  },
+
+  "tools": {
+    "declared": [],
+    "notes": "List tool names here as they are implemented. Risk classification per platform control patterns."
+  },
+
+  "observability": {
+    "audit_events_enabled": false,
+    "event_schema_version": "0.2.0",
+    "ingestion_url_env": "EVENT_INGESTION_URL",
+    "notes": "Set audit_events_enabled to true when emitter is wired. Reference platform audit-event.schema.json."
+  },
+
+  "platform": {
+    "relationship": "[integrated|adjacent|standalone]",
+    "project_id": "[project-id]",
+    "registration_status": "[not-started|in-progress|complete]"
+  },
+
+  "environment": {
+    "notes": "List any required environment variables (names only — not values).",
+    "required_env_vars": []
+  },
+
+  "integration": {
+    "notes": "[Describe how this node is invoked — e.g., via Claude Code MCP config, via a wrapper script, via a service definition]"
+  }
+}

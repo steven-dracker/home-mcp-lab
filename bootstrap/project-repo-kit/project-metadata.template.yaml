@@ -1,0 +1,42 @@
+# Project Metadata — [PROJECT NAME]
+# Machine-readable project identity declaration.
+# Fill in all fields before first Claude Code session.
+# Do not include secrets, credentials, or environment-specific values.
+
+project:
+  name: "[Project Name]"
+  id: "[project-id]"                          # short slug, used in prompt taxonomy and event fields
+  type: "[mcp-node|agent-workflow|content-pipeline|automation|general]"
+  description: "[One-sentence description of what this project does]"
+  status: "[active|paused|archived]"
+
+repo:
+  name: "[repo-name]"
+  visibility: "[public|private]"
+  default_branch: "main"
+  platform: "github"
+
+platform:
+  relationship: "[integrated|adjacent|standalone]"
+  # integrated   — emits audit events, registered with home-mcp-lab platform
+  # adjacent     — follows platform workflow conventions, no audit integration
+  # standalone   — uses bootstrap kit conventions only
+  audit_events_enabled: false                  # set to true when emitter is wired
+  integration_status: "[not-started|in-progress|complete]"
+
+governance:
+  handoff_enabled: true
+  primer_file: "chatgpt-primer.md"
+  prompt_id_prefix: "[CC-PROJECT-*]"           # e.g., CC-MYPROJECT-XXXXXX
+  pr_workflow: true
+  feature_branches_only: true
+
+mcp:
+  enabled: false                               # set to true if this repo uses an MCP server
+  server_id: "[server-id]"                     # e.g., myproject-mcp-server
+  transport: "[stdio|http|unset]"
+  runtime: "[node|python|dotnet|unset]"
+
+outputs:
+  primary: "[what this project produces — e.g., audit events, processed content, API responses]"
+  secondary: []
