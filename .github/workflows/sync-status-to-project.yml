@@ -1,99 +1,224 @@
 name: Sync status label to Project board
 
-# Fires when a status:* label is added to an issue.
-# Moves the corresponding project item to the matching Status column.
+# Moves a project item to the column matching the issue's active status:* label.
 #
-# Required: A PAT with `project` scope stored as Actions secret PROJECT_PAT.
-# The built-in GITHUB_TOKEN does not have project-write scope for Projects v2.
+# Triggers:
+#   - issue labeled        — fires when any status:* label is added
+#   - workflow_dispatch    — manual run; requires issue_number input
+#
+# Required secret: PROJECT_PAT
+#   A PAT with `repo` + `project` scopes stored as a repository Actions secret.
+#   The built-in GITHUB_TOKEN lacks project-write access for Projects v2.
 #
 # Setup (one-time, operator):
-#   1. Create a PAT with scopes: repo + project
-#   2. Add it as a repo secret: Settings → Secrets → Actions → New secret
+#   1. Create a PAT at github.com/settings/tokens with scopes: repo + project
+#   2. Settings → Secrets and variables → Actions → New repository secret
 #      Name: PROJECT_PAT
-#   3. Set PROJECT_NUMBER below to the target project number
+#   3. Confirm PROJECT_NUMBER and PROJECT_OWNER below match the target project
 #
-# Status label → project column mapping:
+# Label → column mapping:
 #   status:backlog      → Backlog
 #   status:ready        → Ready
 #   status:in-progress  → In Progress
 #   status:blocked      → Blocked
 #   status:done         → Done
+#
+# Malformed state handling:
+#   - No status:* label       → warning logged; exits 0 (no action)
+#   - Multiple status:* labels → error logged; exits 1 (operator must fix)
+#   - PROJECT_PAT absent       → error logged; exits 1
+#   - Item not in project      → error logged with diagnostic; exits 1
+#   - Status field/option miss → error logged with fix instruction; exits 1
+#
+# Issue labels are never modified by this workflow.
 
 on:
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to sync (e.g. 37)"
+        required: true
+        type: string
 
 env:
-  PROJECT_NUMBER: 1          # Project #1: https://github.com/users/steven-dracker/projects/1
+  PROJECT_NUMBER: 1
   PROJECT_OWNER: steven-dracker
 
 jobs:
   sync-status:
     runs-on: ubuntu-latest
-    # Only run for status:* labels
-    if: startsWith(github.event.label.name, 'status:')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.label.name, 'status:')
 
     steps:
-      - name: Map label to column name
-        id: map
+
+      # ── 1. Validate PROJECT_PAT ────────────────────────────────────────────
+
+      - name: Validate PROJECT_PAT secret
         run: |
-          LABEL="${{ github.event.label.name }}"
+          if [[ -z "${{ secrets.PROJECT_PAT }}" ]]; then
+            echo "::error::PROJECT_PAT secret is not configured."
+            echo "::error::Create a PAT with scopes [repo, project] and add it as a repository secret."
+            echo "::error::Path: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          echo "PROJECT_PAT present ✓"
+
+      # ── 2. Resolve issue number and URL ───────────────────────────────────
+
+      - name: Resolve issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            NUMBER="${{ inputs.issue_number }}"
+          else
+            NUMBER="${{ github.event.issue.number }}"
+          fi
+
+          if [[ -z "$NUMBER" || ! "$NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid issue number: '$NUMBER'"
+            exit 1
+          fi
+
+          URL=$(gh api repos/${{ github.repository }}/issues/$NUMBER --jq '.html_url' 2>&1) || {
+            echo "::error::Could not fetch issue #$NUMBER: $URL"
+            exit 1
+          }
+
+          echo "number=$NUMBER" >> $GITHUB_OUTPUT
+          echo "url=$URL"       >> $GITHUB_OUTPUT
+          echo "Issue #$NUMBER → $URL"
+
+      # ── 3. Detect active status label (exactly one required) ──────────────
+
+      - name: Detect status label
+        id: status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NUMBER="${{ steps.issue.outputs.number }}"
+
+          ALL_LABELS=$(gh api repos/${{ github.repository }}/issues/$NUMBER/labels \
+            --jq '[.[].name]') || {
+            echo "::error::Failed to fetch labels for issue #$NUMBER"
+            exit 1
+          }
+
+          STATUS_LABELS=$(echo "$ALL_LABELS" | jq -r '.[] | select(startswith("status:"))')
+          COUNT=$(echo "$STATUS_LABELS" | grep -c '^status:' 2>/dev/null || echo 0)
+
+          echo "All labels on #$NUMBER: $ALL_LABELS"
+          echo "Status labels ($COUNT): $(echo "$STATUS_LABELS" | tr '\n' ' ')"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "::warning::Issue #$NUMBER has no status:* label — nothing to sync"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [[ "$COUNT" -gt 1 ]]; then
+            echo "::error::Issue #$NUMBER has $COUNT status:* labels: $(echo "$STATUS_LABELS" | tr '\n' ' ')"
+            echo "::error::Exactly one status:* label must be present. Remove extras and re-run."
+            exit 1
+          fi
+
+          LABEL=$(echo "$STATUS_LABELS" | head -1)
+
           case "$LABEL" in
-            "status:backlog")     echo "column=Backlog"     >> $GITHUB_OUTPUT ;;
-            "status:ready")       echo "column=Ready"       >> $GITHUB_OUTPUT ;;
-            "status:in-progress") echo "column=In Progress" >> $GITHUB_OUTPUT ;;
-            "status:blocked")     echo "column=Blocked"     >> $GITHUB_OUTPUT ;;
-            "status:done")        echo "column=Done"        >> $GITHUB_OUTPUT ;;
+            "status:backlog")     COLUMN="Backlog"     ;;
+            "status:ready")       COLUMN="Ready"       ;;
+            "status:in-progress") COLUMN="In Progress" ;;
+            "status:blocked")     COLUMN="Blocked"     ;;
+            "status:done")        COLUMN="Done"        ;;
             *)
-              echo "Unrecognised status label: $LABEL — skipping"
-              exit 0
+              echo "::error::Unrecognised status label: '$LABEL'"
+              exit 1
               ;;
           esac
 
-      - name: Move issue to project column
+          echo "skip=false"    >> $GITHUB_OUTPUT
+          echo "label=$LABEL"  >> $GITHUB_OUTPUT
+          echo "column=$COLUMN" >> $GITHUB_OUTPUT
+          echo "Active status: $LABEL → column: $COLUMN"
+
+      # ── 4. Sync to project ─────────────────────────────────────────────────
+
+      - name: Sync to project
+        if: steps.status.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.PROJECT_PAT }}
         run: |
-          COLUMN="${{ steps.map.outputs.column }}"
-          ISSUE_URL="${{ github.event.issue.html_url }}"
+          ISSUE_URL="${{ steps.issue.outputs.url }}"
+          ISSUE_NUM="${{ steps.issue.outputs.number }}"
+          COLUMN="${{ steps.status.outputs.column }}"
 
-          # Add issue to project (idempotent — safe to call on existing items)
-          gh project item-add ${{ env.PROJECT_NUMBER }} \
-            --owner "${{ env.PROJECT_OWNER }}" \
-            --url "$ISSUE_URL" 2>/dev/null || true
+          echo "Syncing issue #$ISSUE_NUM → $COLUMN"
 
-          # Get item ID for this issue in the project
-          ITEM_ID=$(gh project item-list ${{ env.PROJECT_NUMBER }} \
+          # Add to project (idempotent)
+          ADD_OUT=$(gh project item-add "${{ env.PROJECT_NUMBER }}" \
             --owner "${{ env.PROJECT_OWNER }}" \
-            --format json \
-            | jq -r --arg url "$ISSUE_URL" \
-              '.items[] | select(.content.url == $url) | .id')
+            --url "$ISSUE_URL" 2>&1) && echo "item-add: $ADD_OUT" \
+            || echo "item-add returned non-zero (may already be present): $ADD_OUT"
+
+          # Look up item ID — retry once for eventual consistency after add
+          ITEM_ID=""
+          for attempt in 1 2; do
+            ITEM_ID=$(gh project item-list "${{ env.PROJECT_NUMBER }}" \
+              --owner "${{ env.PROJECT_OWNER }}" \
+              --format json \
+              | jq -r --arg url "$ISSUE_URL" \
+                '.items[] | select(.content.url == $url) | .id')
+            [[ -n "$ITEM_ID" ]] && break
+            if [[ $attempt -eq 1 ]]; then
+              echo "Item not found on attempt 1 — retrying in 4s"
+              sleep 4
+            fi
+          done
 
           if [[ -z "$ITEM_ID" ]]; then
-            echo "Item not found in project after add — cannot move"
+            echo "::error::Issue #$ISSUE_NUM not found in project after 2 lookup attempts."
+            echo "::error::Ensure PROJECT_PAT has access to project #${{ env.PROJECT_NUMBER }} owned by ${{ env.PROJECT_OWNER }}"
             exit 1
           fi
+          echo "Item ID: $ITEM_ID"
 
-          # Get the Status field ID and the target option ID
-          FIELD_INFO=$(gh project field-list ${{ env.PROJECT_NUMBER }} \
+          # Resolve Status field and target option IDs
+          FIELD_JSON=$(gh project field-list "${{ env.PROJECT_NUMBER }}" \
             --owner "${{ env.PROJECT_OWNER }}" \
-            --format json \
+            --format json 2>&1) || {
+            echo "::error::Failed to list project fields: $FIELD_JSON"
+            exit 1
+          }
+
+          FIELD_ID=$(echo "$FIELD_JSON" \
+            | jq -r '.fields[] | select(.name == "Status") | .id')
+          OPTION_ID=$(echo "$FIELD_JSON" \
             | jq -r --arg col "$COLUMN" \
-              '.fields[] | select(.name == "Status") | {fieldId: .id, optionId: (.options[] | select(.name == $col) | .id)}')
+              '.fields[] | select(.name == "Status") | .options[] | select(.name == $col) | .id')
 
-          FIELD_ID=$(echo "$FIELD_INFO" | jq -r '.fieldId')
-          OPTION_ID=$(echo "$FIELD_INFO" | jq -r '.optionId')
-
-          if [[ -z "$FIELD_ID" || -z "$OPTION_ID" ]]; then
-            echo "Status field or option '$COLUMN' not found in project"
+          if [[ -z "$FIELD_ID" ]]; then
+            echo "::error::No 'Status' field found in project #${{ env.PROJECT_NUMBER }}."
+            echo "::error::Add a single-select field named exactly 'Status' in the project settings."
             exit 1
           fi
 
-          # Set the Status field on the project item
+          if [[ -z "$OPTION_ID" ]]; then
+            echo "::error::Status field has no option named '$COLUMN'."
+            echo "::error::Add '$COLUMN' as an option to the Status field."
+            exit 1
+          fi
+
+          echo "Field ID: $FIELD_ID  Option ID: $OPTION_ID"
+
           gh project item-edit \
             --id "$ITEM_ID" \
             --field-id "$FIELD_ID" \
-            --project-id ${{ env.PROJECT_NUMBER }} \
+            --project-id "${{ env.PROJECT_NUMBER }}" \
             --single-select-option-id "$OPTION_ID"
 
-          echo "Moved issue to: $COLUMN"
+          echo "✓ Issue #$ISSUE_NUM moved to: $COLUMN"
