@@ -174,4 +174,62 @@ function buildToolInvocationEvent(context, outcome) {
   };
 }
 
-module.exports = { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent };
+/**
+ * Builds a schema-conforming secret.retrieval audit event.
+ *
+ * Required context fields:
+ *   projectId, agentId, correlationId, secretIdentifier, retrievalMechanism
+ *
+ * Optional context fields:
+ *   mcpServer (default 'n/a'), retrievalMode (default 'non-interactive'),
+ *   environmentContext (default 'cli')
+ *
+ * Required outcome fields:
+ *   status ('success' | 'failure')
+ *
+ * Optional outcome fields:
+ *   failureReason (required when status is 'failure')
+ *
+ * Throws if any required field is missing or invalid.
+ * Secret values must never appear in secretIdentifier or any other field.
+ */
+function buildSecretRetrievalEvent(context, outcome) {
+  const required = ['projectId', 'agentId', 'correlationId', 'secretIdentifier', 'retrievalMechanism'];
+  for (const field of required) {
+    if (!context[field]) {
+      throw new Error(`Missing required emitter context field: ${field}`);
+    }
+  }
+
+  if (outcome.status !== 'success' && outcome.status !== 'failure') {
+    throw new Error(`Invalid secret.retrieval status: "${outcome.status}". Must be "success" or "failure".`);
+  }
+
+  const metadata = {
+    secret_identifier: context.secretIdentifier,
+    retrieval_mode: context.retrievalMode || 'non-interactive',
+    environment_context: context.environmentContext || 'cli',
+    retrieval_mechanism: context.retrievalMechanism
+  };
+
+  if (outcome.status === 'failure' && outcome.failureReason) {
+    metadata.failure_reason = String(outcome.failureReason).slice(0, 500);
+  }
+
+  return {
+    schema_version: SCHEMA_VERSION,
+    event_id: randomUUID(),
+    event_type: 'secret.retrieval',
+    timestamp: new Date().toISOString(),
+    platform: PLATFORM,
+    project_id: context.projectId,
+    agent_id: context.agentId,
+    mcp_server: context.mcpServer || 'n/a',
+    action: context.retrievalMechanism,
+    status: outcome.status,
+    correlation_id: context.correlationId,
+    metadata
+  };
+}
+
+module.exports = { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent };
