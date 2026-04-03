@@ -1,0 +1,99 @@
+name: Sync status label to Project board
+
+# Fires when a status:* label is added to an issue.
+# Moves the corresponding project item to the matching Status column.
+#
+# Required: A PAT with `project` scope stored as Actions secret PROJECT_PAT.
+# The built-in GITHUB_TOKEN does not have project-write scope for Projects v2.
+#
+# Setup (one-time, operator):
+#   1. Create a PAT with scopes: repo + project
+#   2. Add it as a repo secret: Settings → Secrets → Actions → New secret
+#      Name: PROJECT_PAT
+#   3. Set PROJECT_NUMBER below to the target project number
+#
+# Status label → project column mapping:
+#   status:backlog      → Backlog
+#   status:ready        → Ready
+#   status:in-progress  → In Progress
+#   status:blocked      → Blocked
+#   status:done         → Done
+
+on:
+  issues:
+    types: [labeled]
+
+env:
+  PROJECT_NUMBER: 1          # Project #1: https://github.com/users/steven-dracker/projects/1
+  PROJECT_OWNER: steven-dracker
+
+jobs:
+  sync-status:
+    runs-on: ubuntu-latest
+    # Only run for status:* labels
+    if: startsWith(github.event.label.name, 'status:')
+
+    steps:
+      - name: Map label to column name
+        id: map
+        run: |
+          LABEL="${{ github.event.label.name }}"
+          case "$LABEL" in
+            "status:backlog")     echo "column=Backlog"     >> $GITHUB_OUTPUT ;;
+            "status:ready")       echo "column=Ready"       >> $GITHUB_OUTPUT ;;
+            "status:in-progress") echo "column=In Progress" >> $GITHUB_OUTPUT ;;
+            "status:blocked")     echo "column=Blocked"     >> $GITHUB_OUTPUT ;;
+            "status:done")        echo "column=Done"        >> $GITHUB_OUTPUT ;;
+            *)
+              echo "Unrecognised status label: $LABEL — skipping"
+              exit 0
+              ;;
+          esac
+
+      - name: Move issue to project column
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+        run: |
+          COLUMN="${{ steps.map.outputs.column }}"
+          ISSUE_URL="${{ github.event.issue.html_url }}"
+
+          # Add issue to project (idempotent — safe to call on existing items)
+          gh project item-add ${{ env.PROJECT_NUMBER }} \
+            --owner "${{ env.PROJECT_OWNER }}" \
+            --url "$ISSUE_URL" 2>/dev/null || true
+
+          # Get item ID for this issue in the project
+          ITEM_ID=$(gh project item-list ${{ env.PROJECT_NUMBER }} \
+            --owner "${{ env.PROJECT_OWNER }}" \
+            --format json \
+            | jq -r --arg url "$ISSUE_URL" \
+              '.items[] | select(.content.url == $url) | .id')
+
+          if [[ -z "$ITEM_ID" ]]; then
+            echo "Item not found in project after add — cannot move"
+            exit 1
+          fi
+
+          # Get the Status field ID and the target option ID
+          FIELD_INFO=$(gh project field-list ${{ env.PROJECT_NUMBER }} \
+            --owner "${{ env.PROJECT_OWNER }}" \
+            --format json \
+            | jq -r --arg col "$COLUMN" \
+              '.fields[] | select(.name == "Status") | {fieldId: .id, optionId: (.options[] | select(.name == $col) | .id)}')
+
+          FIELD_ID=$(echo "$FIELD_INFO" | jq -r '.fieldId')
+          OPTION_ID=$(echo "$FIELD_INFO" | jq -r '.optionId')
+
+          if [[ -z "$FIELD_ID" || -z "$OPTION_ID" ]]; then
+            echo "Status field or option '$COLUMN' not found in project"
+            exit 1
+          fi
+
+          # Set the Status field on the project item
+          gh project item-edit \
+            --id "$ITEM_ID" \
+            --field-id "$FIELD_ID" \
+            --project-id ${{ env.PROJECT_NUMBER }} \
+            --single-select-option-id "$OPTION_ID"
+
+          echo "Moved issue to: $COLUMN"

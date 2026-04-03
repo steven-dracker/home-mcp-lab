@@ -1,6 +1,6 @@
 # GitHub Issue Lifecycle — Home MCP Compliance Lab
 
-**Related prompt:** CC-HMCP-000006E  
+**Related prompts:** CC-HMCP-000006E, CC-HMCP-000006F  
 **Last updated:** 2026-04-03
 
 ---
@@ -12,9 +12,16 @@ Three layers. Each layer has a distinct role. Do not collapse them.
 | Layer | Tool | Purpose |
 |---|---|---|
 | **Issues** | GitHub Issues | Canonical backlog — source of truth for every work item |
-| **Project board** | [Project #1](https://github.com/users/steven-dracker/projects/1/views/1) | Execution state — current status of active work |
+| **`status:*` labels** | GitHub Labels | Execution state — Claude applies these; they are readable without project scope |
+| **Project board** | [Project #1](https://github.com/users/steven-dracker/projects/1/views/1) | Visual display — synced from `status:*` labels via Actions workflow |
 | **Milestones** | GitHub Milestones | Delivery grouping — which phase an issue belongs to |
-| **Labels** | GitHub Labels | Classification — type, priority, phase |
+| **Classification labels** | GitHub Labels | Type, priority, phase — separate from status |
+
+### Why labels drive status (not project fields)
+
+GitHub Projects v2 field mutations require a PAT with `project` OAuth scope. The platform PAT has full `repo` scope but not `project` scope. Applying a label requires only `repo` scope — so Claude can change `status:*` labels directly on issues, and a GitHub Actions workflow (`sync-status-to-project.yml`) syncs those changes to the project board automatically.
+
+This means Claude updates state in one place (labels on issues), and the project board reflects it without Claude needing elevated permissions.
 
 ---
 
@@ -30,17 +37,27 @@ Milestones represent **outcomes**, not workflow states. An issue in M3 may be in
 
 ---
 
-## Project Board — Execution States
+## Status Labels — Execution States
+
+Claude applies these labels directly. No project scope required.
+
+| Label | Meaning |
+|---|---|
+| `status:backlog` | Defined, not yet started |
+| `status:ready` | Dependencies met, cleared to start |
+| `status:in-progress` | Active work underway |
+| `status:blocked` | Work started but cannot proceed |
+| `status:done` | Acceptance criteria met; issue closed or confirmed closed |
+
+Each issue carries exactly one `status:*` label at any time. When changing state, remove the old status label and add the new one.
+
+### Project Board Sync
+
+`.github/workflows/sync-status-to-project.yml` fires on every `status:*` label event and moves the project item to the matching column. Requires a repo secret `PROJECT_PAT` containing a PAT with `repo + project` scope.
+
+**Until `PROJECT_PAT` is configured:** Labels are the authoritative state. The project board may lag but issues are always current.
 
 Project: https://github.com/users/steven-dracker/projects/1/views/1
-
-| Column | Meaning |
-|---|---|
-| **Backlog** | Defined, not yet started |
-| **Ready** | Dependencies met, cleared to start |
-| **In Progress** | Active work underway |
-| **Blocked** | Work started but cannot proceed |
-| **Done** | Acceptance criteria met; issue closed or confirmed closed |
 
 ---
 
@@ -50,20 +67,22 @@ Project: https://github.com/users/steven-dracker/projects/1/views/1
 
 Claude must:
 
-1. Find the issue by ID (`gh issue list --search "[CC-HMCP-XXXXXX]"`)
-2. Add a comment:
+1. Find the issue by ID:
+   ```bash
+   gh issue list --repo steven-dracker/home-mcp-lab --search "[CC-HMCP-XXXXXX]"
+   ```
+2. Remove `status:ready` or `status:backlog` label; add `status:in-progress`:
+   ```bash
+   gh issue edit <number> --repo steven-dracker/home-mcp-lab \
+     --remove-label "status:ready" --add-label "status:in-progress"
+   ```
+3. Add a comment:
    ```
    Work started.
    - Prompt: CC-HMCP-XXXXXX
    - Branch: feature/cc-hmcp-XXXXXX-short-title
    - Scope: [brief scope statement]
    ```
-3. Move project item → **In Progress**
-   ```bash
-   gh project item-edit --id <item-id> --field-id <status-field-id> \
-     --project-id <project-id> --single-select-option-id <in-progress-id>
-   ```
-   Note: requires PAT with `project` scope (see Project Board Limitation below).
 
 ### When a PR Is Created
 
@@ -77,22 +96,37 @@ Claude must:
 2. PR body must include `Closes #<issue>` for CC items (enables auto-close on merge).
 3. VG / CTRL / INF / TD items: do **not** use `Closes` unless acceptance criteria are fully met.
 
+### When Blocked
+
+Claude must:
+
+1. Remove `status:in-progress`; add `status:blocked`:
+   ```bash
+   gh issue edit <number> --repo steven-dracker/home-mcp-lab \
+     --remove-label "status:in-progress" --add-label "status:blocked"
+   ```
+2. Comment with exact blocker detail.
+
 ### When Work Completes
 
-Claude must add a completion comment:
+Claude must:
 
-```
-Work complete.
-- Validation: [summary of what was tested]
-- Branch: feature/...
-- Commit: <hash>
-- PR: #<number> [merged / open]
-- Blockers: none / [description]
-```
-
-Then update project state:
-- Complete → **Done**
-- Blocked → **Blocked** (with reason in issue comment)
+1. Add a completion comment:
+   ```
+   Work complete.
+   - Validation: [summary of what was tested]
+   - Branch: feature/...
+   - Commit: <hash>
+   - PR: #<number> [merged / open]
+   - Blockers: none / [description]
+   ```
+2. Update label to reflect outcome:
+   - Fully complete → remove `status:in-progress`, add `status:done`
+     ```bash
+     gh issue edit <number> --repo steven-dracker/home-mcp-lab \
+       --remove-label "status:in-progress" --add-label "status:done"
+     ```
+   - Blocked → remove `status:in-progress`, add `status:blocked`
 
 ---
 
@@ -110,20 +144,31 @@ For narrowed gaps: add a comment documenting what was resolved and what remains.
 
 ---
 
-## Project Board Limitation — PAT Scope
+## Activating Full Project Board Sync
 
-GitHub Projects v2 mutations (moving items between columns, adding items to project) require a PAT with the `project` OAuth scope. The current platform PAT (`gh auth token`) lacks this scope.
+The Actions workflow (`.github/workflows/sync-status-to-project.yml`) bridges label changes to project columns automatically, but requires a secret `PROJECT_PAT`.
 
-**Impact:** Claude cannot move project items programmatically in the current auth context.
+**One-time setup (operator):**
+1. Generate a PAT at github.com/settings/tokens with scopes: `repo` + `project`
+2. Add it to repo secrets: Settings → Secrets and variables → Actions → New repository secret → Name: `PROJECT_PAT`
+3. The workflow fires on every `status:*` label event from that point forward
 
-**Workaround:** After Claude posts a completion comment on an issue, the operator moves the project item manually. The issue comment serves as the authoritative state record; the project column is a convenience display.
-
-**Resolution path:** Generate a PAT with `project` scope and store it as a separate secret (e.g., `GH_PROJECT_PAT` in Keeper). Wire it into the lifecycle helper when available.
+Until this is configured, `status:*` labels are the authoritative state and the project board is updated manually by the operator.
 
 ---
 
 ## Label Reference
 
+### Status (execution state — exactly one per issue)
+| Label | Meaning |
+|---|---|
+| `status:backlog` | Not yet started |
+| `status:ready` | Dependencies met, cleared to start |
+| `status:in-progress` | Active work underway |
+| `status:blocked` | Cannot proceed |
+| `status:done` | Acceptance criteria met |
+
+### Classification (can stack)
 | Label | Meaning |
 |---|---|
 | `type:cc` | CC-HMCP-* implementation prompt |
@@ -149,9 +194,19 @@ gh issue list --repo steven-dracker/home-mcp-lab --search "[CC-HMCP-000006B]"
 # Comment on issue
 gh issue comment <number> --repo steven-dracker/home-mcp-lab --body "..."
 
+# Change status (example: backlog → in-progress)
+gh issue edit <number> --repo steven-dracker/home-mcp-lab \
+  --remove-label "status:backlog" --add-label "status:in-progress"
+
+# Check current status of all open issues
+gh issue list --repo steven-dracker/home-mcp-lab \
+  --json number,title,labels --jq '.[] | "\(.number) \(.title) — \([.labels[].name | select(startswith("status:"))] | join(","))"'
+
 # Check milestone assignments
-gh api repos/steven-dracker/home-mcp-lab/milestones --jq '.[] | "\(.number) \(.title) — \(.open_issues) open"'
+gh api repos/steven-dracker/home-mcp-lab/milestones \
+  --jq '.[] | "\(.number) \(.title) — \(.open_issues) open"'
 
 # List issues in a milestone
-gh issue list --repo steven-dracker/home-mcp-lab --milestone "HMCP-M2.5 — Secrets and Remaining Observability"
+gh issue list --repo steven-dracker/home-mcp-lab \
+  --milestone "HMCP-M2.5 — Secrets and Remaining Observability"
 ```
