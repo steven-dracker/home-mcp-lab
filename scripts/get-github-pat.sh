@@ -26,10 +26,18 @@
 set -euo pipefail
 
 SCRIPT="get-github-pat"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Emit a secret.retrieval audit event — best-effort, non-blocking.
+# Never fails the caller: backgrounded and all output suppressed.
+_emit_retrieval() {
+  node "$SCRIPT_DIR/emit-secret-retrieval.js" "$@" >/dev/null 2>&1 &
+}
 
 # ── 1. Pass-through: already in environment ──────────────────────────────────
 
 if [[ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+  _emit_retrieval --status success --mechanism env-passthrough --secret-id "GITHUB_PERSONAL_ACCESS_TOKEN"
   printf '%s' "$GITHUB_PERSONAL_ACCESS_TOKEN"
   exit 0
 fi
@@ -58,6 +66,9 @@ if [[ -n "${KEEPER_GITHUB_PAT_UID:-}" ]]; then
       echo "[$SCRIPT] Keeper retrieval failed for UID=$KEEPER_GITHUB_PAT_UID (exit $KEEPER_EXIT)" >&2
       echo "[$SCRIPT] Possible causes: session not saved, auth token expired, record not found" >&2
       echo "[$SCRIPT] Run 'keeper login' interactively on dude-mcp-01 to refresh the saved session" >&2
+      _emit_retrieval --status failure --mechanism keeper-commander \
+        --secret-id "keeper:${KEEPER_GITHUB_PAT_UID}" \
+        --failure-reason "keeper-exit-${KEEPER_EXIT}-or-empty-response"
       # Fall through to gh CLI
     else
       # Parse the PAT from the Keeper record JSON.
@@ -104,10 +115,15 @@ PYEOF
 ) || true
 
       if [[ -n "$PAT" ]]; then
+        _emit_retrieval --status success --mechanism keeper-commander \
+          --secret-id "keeper:${KEEPER_GITHUB_PAT_UID}"
         printf '%s' "$PAT"
         exit 0
       fi
 
+      _emit_retrieval --status failure --mechanism keeper-commander \
+        --secret-id "keeper:${KEEPER_GITHUB_PAT_UID}" \
+        --failure-reason "record-found-no-token-field-extracted"
       echo "[$SCRIPT] Keeper record found but no PAT field extracted — check record UID and field type" >&2
     fi
   fi
@@ -119,12 +135,16 @@ if command -v gh &>/dev/null; then
   PAT=$(gh auth token 2>/dev/null) || true
   if [[ -n "$PAT" ]]; then
     echo "[$SCRIPT] Using gh CLI token (not Keeper — ensure this is intentional)" >&2
+    _emit_retrieval --status success --mechanism gh-cli --secret-id "gh-auth-token"
     printf '%s' "$PAT"
     exit 0
   fi
 fi
 
 # ── No path succeeded ─────────────────────────────────────────────────────────
+
+_emit_retrieval --status failure --mechanism no-path --secret-id "github-pat" \
+  --failure-reason "no-retrieval-path-succeeded"
 
 cat >&2 <<EOF
 [$SCRIPT] ERROR: No GitHub PAT available via any configured path.

@@ -26,7 +26,7 @@
  */
 
 const { randomUUID } = require('crypto');
-const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent } = require('./event-builder');
+const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent } = require('./event-builder');
 const { submit } = require('./transport');
 const { record } = require('./failure-observer');
 
@@ -224,4 +224,38 @@ async function withSession(baseContext, fn) {
   return result;
 }
 
-module.exports = { emitToolInvocation, withToolInstrumentation, emitSessionStart, emitSessionEnd, withSession };
+/**
+ * Emit a single secret.retrieval event.
+ * Never throws — emission failures are handled by the failure observer.
+ *
+ * context shape:
+ *   projectId          string  required
+ *   agentId            string  required
+ *   secretIdentifier   string  required — non-sensitive reference; never the secret value
+ *   retrievalMechanism string  required — 'keeper-commander' | 'env-passthrough' | 'gh-cli'
+ *   correlationId      string  optional — generated if absent
+ *   mcpServer          string  optional — default 'n/a'
+ *   retrievalMode      string  optional — default 'non-interactive'
+ *   environmentContext string  optional — 'service' | 'cli'; default 'cli'
+ *
+ * outcome shape:
+ *   status             'success' | 'failure'  required
+ *   failureReason      string                 required when status is 'failure'
+ */
+function emitSecretRetrieval(context, outcome) {
+  try {
+    const resolvedContext = {
+      ...context,
+      correlationId: context.correlationId || generateCorrelationId()
+    };
+    const event = buildSecretRetrievalEvent(resolvedContext, outcome);
+    submit(event);
+  } catch (err) {
+    record(err, {
+      secretIdentifier: context.secretIdentifier,
+      status: outcome ? outcome.status : 'unknown'
+    });
+  }
+}
+
+module.exports = { emitToolInvocation, withToolInstrumentation, emitSessionStart, emitSessionEnd, withSession, emitSecretRetrieval };
