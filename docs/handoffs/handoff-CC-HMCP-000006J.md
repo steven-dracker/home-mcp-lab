@@ -54,7 +54,7 @@
 ## Known Gaps
 
 - VG-HMCP-000001 — Keeper service-context viability on dude-mcp-01 (Open — session expiry in systemd unconfirmed; no new evidence to close)
-- VG-HMCP-000003 — GitHub PAT retrieval path visibility (Narrowed to closed — `secret.retrieval` events now emitted at all 6 retrieval outcomes; gap resolved pending live validation on dude-mcp-01 with `EVENT_INGESTION_URL` set)
+- VG-HMCP-000003 — GitHub PAT retrieval path visibility (Implementation complete — `secret.retrieval` events emitted at all 6 retrieval outcomes; awaiting live validation on dude-mcp-01 with `EVENT_INGESTION_URL` set before full closure)
 
 ---
 
