@@ -105,6 +105,26 @@ Recommended settings for `main`:
 
 ---
 
+## 13. Issue and Backlog Setup (recommended)
+
+See `github-backlog/` in the bootstrap kit for full guidance.
+
+**Required for backlog adoption:**
+- [ ] Create `status:*` labels in GitHub (see `github-backlog/label-model.md` for names, colors, and a setup script)
+- [ ] Read `github-backlog/backlog-operating-rules.md` and `github-backlog/session-vs-backlog-state.md`
+
+**Recommended:**
+- [ ] Create `type:*` labels
+- [ ] Add initial backlog issues (use `github-backlog/example-bootstrap-backlog.md` as a starting point)
+- [ ] Copy issue body templates from `github-backlog/issue-templates/` into `.github/ISSUE_TEMPLATE/` if using GitHub issue templates
+
+**Optional:**
+- [ ] Create milestones for planned phases (see `github-backlog/milestone-guidance.md`)
+- [ ] Set up a GitHub Project board (see `github-backlog/optional-github-project-guidance.md`)
+- [ ] Add a label sync GitHub Actions workflow if automatic project board sync is desired
+
+---
+
 ## Done
 
 When all required steps are complete, run the Bootstrap Validation Checklist (`docs/bootstrap-validation-checklist.md`) to confirm the repo is operationally ready.

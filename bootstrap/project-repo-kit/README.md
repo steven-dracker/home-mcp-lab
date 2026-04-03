@@ -53,6 +53,28 @@ Do not use this kit for:
 | `mcp-node/README.md` | Optional | MCP node starter guidance |
 | `mcp-node/project-node.template.json` | Optional | MCP node identity and config starter |
 | `CLAUDE.template.md` | Optional | Minimal `CLAUDE.md` starter |
+| `github-backlog/README.md` | Recommended | Backlog starter layer overview |
+| `github-backlog/backlog-operating-rules.md` | Recommended | How to manage backlog day-to-day |
+| `github-backlog/session-vs-backlog-state.md` | Recommended | Explicit state-layer distinction |
+| `github-backlog/label-model.md` | Recommended | Default label taxonomy |
+| `github-backlog/issue-taxonomy-guidance.md` | Optional | Issue types and naming conventions |
+| `github-backlog/milestone-guidance.md` | Optional | When and how to use milestones |
+| `github-backlog/example-bootstrap-backlog.md` | Optional | Example first backlog items |
+| `github-backlog/optional-github-project-guidance.md` | Optional | GitHub Projects usage guidance |
+| `github-backlog/issue-templates/feature-template.md` | Optional | Starter issue template — features |
+| `github-backlog/issue-templates/debt-template.md` | Optional | Starter issue template — debt |
+| `github-backlog/issue-templates/risk-template.md` | Optional | Starter issue template — risks/gaps |
+| `github-backlog/issue-templates/workflow-template.md` | Optional | Starter issue template — docs/workflow |
+
+---
+
+## GitHub Backlog Starter Layer
+
+The `github-backlog/` subdirectory contains a reusable starter layer for GitHub issue management, backlog discipline, and execution state.
+
+Minimum viable adoption: create the `status:*` labels in GitHub (see `github-backlog/label-model.md`), read `backlog-operating-rules.md` and `session-vs-backlog-state.md`, and create issues for the items in `example-bootstrap-backlog.md`.
+
+GitHub Project board usage is optional — see `optional-github-project-guidance.md`.
 
 ---
 
