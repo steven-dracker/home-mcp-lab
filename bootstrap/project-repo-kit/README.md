@@ -42,6 +42,7 @@ Do not use this kit for:
 | `handoffs/HANDOFF-TEMPLATE.md` | Required | Session handoff template |
 | `handoffs/README.md` | Required | Handoff system guidance |
 | `project-metadata.template.yaml` | Required | Machine-readable project identity |
+| `docs/operator-guide.template.md` | Required | Plain-language operator guide; also usable as wiki-home |
 | `docs/repo-setup-checklist.md` | Required | One-time repo setup steps |
 | `docs/first-session-checklist.md` | Required | Pre-work checklist for first Claude Code session |
 | `docs/bootstrap-validation-checklist.md` | Required | Confirm the repo is operationally ready |
