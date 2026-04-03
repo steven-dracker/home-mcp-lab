@@ -1,6 +1,6 @@
 # GitHub Issue Lifecycle — Home MCP Compliance Lab
 
-**Related prompts:** CC-HMCP-000006E, CC-HMCP-000006F  
+**Related prompts:** CC-HMCP-000006E, CC-HMCP-000006F, CC-HMCP-000006G  
 **Last updated:** 2026-04-03
 
 ---
@@ -53,7 +53,20 @@ Each issue carries exactly one `status:*` label at any time. When changing state
 
 ### Project Board Sync
 
-`.github/workflows/sync-status-to-project.yml` fires on every `status:*` label event and moves the project item to the matching column. Requires a repo secret `PROJECT_PAT` containing a PAT with `repo + project` scope.
+Two workflows manage project sync:
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `sync-status-to-project.yml` | Issue labeled / `workflow_dispatch` | Syncs a single issue on label change |
+| `reconcile-status-to-project.yml` | `workflow_dispatch` (manual only) | Full repair pass over all open issues |
+
+Both require a repo secret `PROJECT_PAT` (PAT with `repo + project` scopes).
+
+**Malformed state detection** (sync workflow):
+- No `status:*` label → warning, skip, exit 0
+- Multiple `status:*` labels → error, exit 1 (operator must remove extras)
+- `PROJECT_PAT` missing → error, exit 1 with setup instructions
+- Item not found after add → error, exit 1 with diagnostic
 
 **Until `PROJECT_PAT` is configured:** Labels are the authoritative state. The project board may lag but issues are always current.
 
@@ -144,16 +157,64 @@ For narrowed gaps: add a comment documenting what was resolved and what remains.
 
 ---
 
-## Activating Full Project Board Sync
+## Activating and Testing Project Board Sync
 
-The Actions workflow (`.github/workflows/sync-status-to-project.yml`) bridges label changes to project columns automatically, but requires a secret `PROJECT_PAT`.
+### One-time setup (operator)
 
-**One-time setup (operator):**
 1. Generate a PAT at github.com/settings/tokens with scopes: `repo` + `project`
 2. Add it to repo secrets: Settings → Secrets and variables → Actions → New repository secret → Name: `PROJECT_PAT`
-3. The workflow fires on every `status:*` label event from that point forward
+3. The sync workflow fires on every `status:*` label event from that point forward
 
-Until this is configured, `status:*` labels are the authoritative state and the project board is updated manually by the operator.
+### Testing the sync (low-risk validation path)
+
+Use issue #37 (CC-HMCP-000006B, currently `status:ready`):
+
+```bash
+# Step 1: Move to in-progress — triggers sync workflow
+gh issue edit 37 --repo steven-dracker/home-mcp-lab \
+  --remove-label "status:ready" --add-label "status:in-progress"
+
+# Step 2: Verify workflow ran
+gh run list --repo steven-dracker/home-mcp-lab --workflow sync-status-to-project.yml --limit 1
+
+# Step 3: Check workflow logs
+gh run view <run-id> --repo steven-dracker/home-mcp-lab --log
+
+# Step 4: Verify project board moved
+# Check https://github.com/users/steven-dracker/projects/1/views/1
+# Issue #37 should now be in "In Progress" column
+
+# Step 5: Restore to ready
+gh issue edit 37 --repo steven-dracker/home-mcp-lab \
+  --remove-label "status:in-progress" --add-label "status:ready"
+```
+
+### Manual single-issue sync (workflow_dispatch)
+
+Run the sync workflow manually for a specific issue without touching labels:
+
+```bash
+gh workflow run sync-status-to-project.yml \
+  --repo steven-dracker/home-mcp-lab \
+  --field issue_number=37
+```
+
+### Full reconciliation pass
+
+Scans all open issues and repairs any project drift from current labels:
+
+```bash
+gh workflow run reconcile-status-to-project.yml \
+  --repo steven-dracker/home-mcp-lab
+
+# Check results
+gh run list --repo steven-dracker/home-mcp-lab --workflow reconcile-status-to-project.yml --limit 1
+gh run view <run-id> --repo steven-dracker/home-mcp-lab --log
+```
+
+Safe to run repeatedly. Reports malformed issues as warnings without stopping the run.
+
+Until `PROJECT_PAT` is configured, `status:*` labels are the authoritative state and the project board is updated manually by the operator.
 
 ---
 

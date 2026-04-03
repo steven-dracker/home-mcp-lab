@@ -1,0 +1,204 @@
+name: Reconcile all issue statuses to Project board
+
+# Scans all open issues in the repo, reads each issue's active status:* label,
+# ensures the issue exists in the project, and moves it to the matching column.
+# Reports malformed issues (missing or multiple status:* labels) without failing
+# the run — so one bad issue does not block others from being repaired.
+#
+# Triggers:
+#   - workflow_dispatch (manual only — safe to run repeatedly)
+#   - schedule          (optional; uncomment to enable weekly repair pass)
+#
+# Required secret: PROJECT_PAT
+#   Same PAT used by sync-status-to-project.yml (repo + project scopes).
+#
+# Exit behavior:
+#   - Exits 0 even if some issues are malformed (they are reported, not fatal)
+#   - Exits 1 only if PROJECT_PAT is missing or the project cannot be reached
+#
+# Issue labels are never modified by this workflow.
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 6 * * 1'   # Monday 06:00 UTC — uncomment to enable
+
+env:
+  PROJECT_NUMBER: 1
+  PROJECT_OWNER: steven-dracker
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── 1. Validate PROJECT_PAT ────────────────────────────────────────────
+
+      - name: Validate PROJECT_PAT secret
+        run: |
+          if [[ -z "${{ secrets.PROJECT_PAT }}" ]]; then
+            echo "::error::PROJECT_PAT secret is not configured."
+            echo "::error::Create a PAT with scopes [repo, project] and add it as a repository secret."
+            exit 1
+          fi
+          echo "PROJECT_PAT present ✓"
+
+      # ── 2. Reconcile open issues ───────────────────────────────────────────
+
+      - name: Reconcile all open issues
+        env:
+          GH_TOKEN_READ: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN_PROJECT: ${{ secrets.PROJECT_PAT }}
+        run: |
+          REPO="${{ github.repository }}"
+          PROJECT_NUMBER="${{ env.PROJECT_NUMBER }}"
+          PROJECT_OWNER="${{ env.PROJECT_OWNER }}"
+
+          MALFORMED=()
+          SYNCED=0
+          SKIPPED=0
+
+          # Fetch all open issues (up to 500)
+          ISSUES=$(GH_TOKEN="$GH_TOKEN_READ" \
+            gh issue list --repo "$REPO" --state open --limit 500 \
+              --json number,title,labels) || {
+            echo "::error::Failed to list issues"
+            exit 1
+          }
+
+          ISSUE_COUNT=$(echo "$ISSUES" | jq 'length')
+          echo "Open issues found: $ISSUE_COUNT"
+          echo ""
+
+          # Process each issue
+          while IFS= read -r ROW; do
+            NUMBER=$(echo "$ROW" | jq -r '.number')
+            TITLE=$(echo  "$ROW" | jq -r '.title')
+            ALL_LABELS=$(echo "$ROW" | jq -r '[.labels[].name] | join(", ")')
+
+            STATUS_LABELS=$(echo "$ROW" \
+              | jq -r '.labels[].name | select(startswith("status:"))')
+            COUNT=$(echo "$STATUS_LABELS" | grep -c '^status:' 2>/dev/null || echo 0)
+
+            echo "── Issue #$NUMBER: $TITLE"
+            echo "   Labels: $ALL_LABELS"
+
+            # ── Malformed: no status label ─────────────────────────────────
+            if [[ "$COUNT" -eq 0 ]]; then
+              echo "   ::warning:: No status:* label — skipping (add one to include in project)"
+              MALFORMED+=("NO_STATUS:#$NUMBER")
+              SKIPPED=$((SKIPPED + 1))
+              echo ""
+              continue
+            fi
+
+            # ── Malformed: multiple status labels ─────────────────────────
+            if [[ "$COUNT" -gt 1 ]]; then
+              echo "   ::error:: Multiple status:* labels ($(echo "$STATUS_LABELS" | tr '\n' ' ')) — skipping"
+              MALFORMED+=("MULTI_STATUS:#$NUMBER")
+              SKIPPED=$((SKIPPED + 1))
+              echo ""
+              continue
+            fi
+
+            LABEL=$(echo "$STATUS_LABELS" | head -1)
+
+            case "$LABEL" in
+              "status:backlog")     COLUMN="Backlog"     ;;
+              "status:ready")       COLUMN="Ready"       ;;
+              "status:in-progress") COLUMN="In Progress" ;;
+              "status:blocked")     COLUMN="Blocked"     ;;
+              "status:done")        COLUMN="Done"        ;;
+              *)
+                echo "   ::error:: Unrecognised status label '$LABEL' — skipping"
+                MALFORMED+=("UNKNOWN_LABEL:$LABEL:#$NUMBER")
+                SKIPPED=$((SKIPPED + 1))
+                echo ""
+                continue
+                ;;
+            esac
+
+            echo "   Status: $LABEL → $COLUMN"
+
+            ISSUE_URL=$(GH_TOKEN="$GH_TOKEN_READ" \
+              gh api "repos/$REPO/issues/$NUMBER" --jq '.html_url')
+
+            # Add to project (idempotent)
+            GH_TOKEN="$GH_TOKEN_PROJECT" \
+              gh project item-add "$PROJECT_NUMBER" \
+                --owner "$PROJECT_OWNER" \
+                --url "$ISSUE_URL" 2>&1 | sed 's/^/   item-add: /' || true
+
+            # Look up item ID with retry
+            ITEM_ID=""
+            for attempt in 1 2; do
+              ITEM_ID=$(GH_TOKEN="$GH_TOKEN_PROJECT" \
+                gh project item-list "$PROJECT_NUMBER" \
+                  --owner "$PROJECT_OWNER" \
+                  --format json \
+                | jq -r --arg url "$ISSUE_URL" \
+                    '.items[] | select(.content.url == $url) | .id')
+              [[ -n "$ITEM_ID" ]] && break
+              [[ $attempt -eq 1 ]] && sleep 3
+            done
+
+            if [[ -z "$ITEM_ID" ]]; then
+              echo "   ::error:: Item not found in project after add — skipping"
+              MALFORMED+=("ADD_FAILED:#$NUMBER")
+              SKIPPED=$((SKIPPED + 1))
+              echo ""
+              continue
+            fi
+
+            # Resolve field/option IDs
+            FIELD_JSON=$(GH_TOKEN="$GH_TOKEN_PROJECT" \
+              gh project field-list "$PROJECT_NUMBER" \
+                --owner "$PROJECT_OWNER" \
+                --format json)
+
+            FIELD_ID=$(echo "$FIELD_JSON" \
+              | jq -r '.fields[] | select(.name == "Status") | .id')
+            OPTION_ID=$(echo "$FIELD_JSON" \
+              | jq -r --arg col "$COLUMN" \
+                '.fields[] | select(.name == "Status") | .options[] | select(.name == $col) | .id')
+
+            if [[ -z "$FIELD_ID" || -z "$OPTION_ID" ]]; then
+              echo "   ::error:: Status field or option '$COLUMN' not found — skipping"
+              MALFORMED+=("FIELD_MISSING:#$NUMBER")
+              SKIPPED=$((SKIPPED + 1))
+              echo ""
+              continue
+            fi
+
+            GH_TOKEN="$GH_TOKEN_PROJECT" \
+              gh project item-edit \
+                --id "$ITEM_ID" \
+                --field-id "$FIELD_ID" \
+                --project-id "$PROJECT_NUMBER" \
+                --single-select-option-id "$OPTION_ID"
+
+            echo "   ✓ Moved to: $COLUMN"
+            SYNCED=$((SYNCED + 1))
+            echo ""
+
+          done < <(echo "$ISSUES" | jq -c '.[]')
+
+          # ── Summary ────────────────────────────────────────────────────────
+          echo "════════════════════════════════════════"
+          echo "Reconciliation complete"
+          echo "  Total open issues : $ISSUE_COUNT"
+          echo "  Synced            : $SYNCED"
+          echo "  Skipped/malformed : $SKIPPED"
+
+          if [[ ${#MALFORMED[@]} -gt 0 ]]; then
+            echo ""
+            echo "Malformed issues (require operator attention):"
+            for M in "${MALFORMED[@]}"; do
+              echo "  $M"
+            done
+            echo ""
+            echo "::warning::$SKIPPED issue(s) could not be reconciled — see log above"
+          else
+            echo "No malformed issues found ✓"
+          fi
