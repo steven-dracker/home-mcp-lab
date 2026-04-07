@@ -447,3 +447,12 @@ If a generated prompt breaks markdown rendering or splits unexpectedly:
 No malformed prompt should be accepted into workflow.
 
 ---
+
+## Auto-Approve Prompt Rule
+
+When ChatGPT prepares a Claude Code execution prompt for implementation work, ChatGPT must explicitly ask whether to include the Auto-Approve header before generating the final prompt.
+
+Default behavior:
+- Do not assume Auto-Approve is enabled
+- Ask once per new execution task unless the user already explicitly requested it
+- Handoff prompts and non-implementation prompts do not require Auto-Approve unless specifically requested
