@@ -236,4 +236,50 @@ function buildSecretRetrievalEvent(context, outcome) {
   };
 }
 
-module.exports = { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent };
+/**
+ * Builds a schema-conforming tool.denial audit event.
+ *
+ * Required context fields:
+ *   toolName, projectId, agentId, mcpServer, correlationId
+ *
+ * Required decision fields (from policy-gate evaluatePolicy result):
+ *   riskLevel, reason, policyBasis
+ *
+ * Throws if any required field is missing.
+ */
+function buildToolDenialEvent(context, decision) {
+  const required = ['toolName', 'projectId', 'agentId', 'mcpServer', 'correlationId'];
+  for (const field of required) {
+    if (!context[field]) {
+      throw new Error(`Missing required emitter context field: ${field}`);
+    }
+  }
+
+  const metadata = {
+    tool_name: context.toolName,
+    risk_level: decision.riskLevel || 'UNKNOWN',
+    denial_reason: decision.reason,
+    policy_basis: decision.policyBasis
+  };
+
+  if (context.initiatingContext) {
+    metadata.initiating_context = context.initiatingContext;
+  }
+
+  return {
+    schema_version: SCHEMA_VERSION,
+    event_id: randomUUID(),
+    event_type: 'tool.denial',
+    timestamp: new Date().toISOString(),
+    platform: PLATFORM,
+    project_id: context.projectId,
+    agent_id: context.agentId,
+    mcp_server: context.mcpServer,
+    action: context.toolName,
+    status: 'failure',
+    correlation_id: context.correlationId,
+    metadata
+  };
+}
+
+module.exports = { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent, buildToolDenialEvent };

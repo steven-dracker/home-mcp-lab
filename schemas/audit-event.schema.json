@@ -38,7 +38,7 @@
     "event_type": {
       "type": "string",
       "description": "Categorizes the event. See defined event types below.",
-      "enum": ["tool.invocation", "secret.retrieval", "session.start", "session.end"],
+      "enum": ["tool.invocation", "tool.denial", "secret.retrieval", "session.start", "session.end"],
       "example": "tool.invocation"
     },
 
@@ -110,6 +110,17 @@
         "arguments_summary": "string — non-sensitive summary or schema of arguments; must not include secret or PII values",
         "execution_duration_ms": "number — duration of tool execution in milliseconds",
         "result_summary": "string — non-sensitive description of the outcome; must not include raw result data if sensitive"
+      }
+    },
+
+    "event_type.tool.denial": {
+      "description": "Emitted when a tool invocation is blocked by the platform policy gate before execution begins. The tool is never invoked. Emitted with status:'failure'.",
+      "metadata_fields": {
+        "tool_name": "string — name of the tool that was denied",
+        "risk_level": "string — risk classification at the time of denial: 'LOW' | 'MEDIUM' | 'HIGH' | 'DESTRUCTIVE' | 'UNKNOWN'",
+        "denial_reason": "string — machine-readable denial reason; currently 'policy_denied'",
+        "policy_basis": "string — machine-readable explanation of the policy that caused the denial (e.g. 'destructive_tool_not_allowed_by_default')",
+        "initiating_context": "string (optional) — prompt ID or workflow context if available"
       }
     },
 

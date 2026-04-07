@@ -12,6 +12,7 @@
  *   withToolInstrumentation(context, fn)   — wrap an async tool call with instrumentation
  *   emitSessionStart(context)              — emit session.start directly; returns correlationId
  *   emitSessionEnd(context, outcome)       — emit session.end directly
+ *   checkAndEnforcePolicy(context)         — evaluate policy; emit tool.denial if denied; returns decision
  *
  * Context shape:
  *   toolName           string  required  — MCP tool name (e.g. "create_issue")
@@ -26,10 +27,11 @@
  */
 
 const { randomUUID } = require('crypto');
-const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent } = require('./event-builder');
+const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent, buildToolDenialEvent } = require('./event-builder');
 const { submit } = require('./transport');
 const { record } = require('./failure-observer');
 const { lookupRiskLevel } = require('./classification-registry');
+const { evaluatePolicy } = require('../policy/policy-gate');
 
 function generateCorrelationId() {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -260,4 +262,49 @@ function emitSecretRetrieval(context, outcome) {
   }
 }
 
-module.exports = { emitToolInvocation, withToolInstrumentation, emitSessionStart, emitSessionEnd, withSession, emitSecretRetrieval };
+/**
+ * Evaluate policy for a tool and emit a tool.denial event if denied.
+ *
+ * Returns a decision object. When allowed === false, the tool must not be
+ * invoked — the caller is responsible for gating execution on this result.
+ *
+ * Never throws — denial emission failures are handled by the failure observer.
+ *
+ * context shape — same as emitToolInvocation context plus:
+ *   allowDestructive  boolean  optional  — per-call explicit override; default false
+ *
+ * Returned decision shape:
+ *   {
+ *     allowed:      boolean
+ *     toolName:     string
+ *     riskLevel:    string|null
+ *     reason:       'allowed' | 'policy_denied' | 'override_allowed'
+ *     policyBasis:  string
+ *   }
+ */
+function checkAndEnforcePolicy(context) {
+  const resolvedContext = {
+    ...context,
+    correlationId: context.correlationId || generateCorrelationId()
+  };
+
+  const decision = evaluatePolicy(resolvedContext.toolName, {
+    allowDestructive: resolvedContext.allowDestructive
+  });
+
+  if (!decision.allowed) {
+    try {
+      const event = buildToolDenialEvent(resolvedContext, decision);
+      submit(event);
+    } catch (err) {
+      record(err, {
+        toolName: resolvedContext.toolName,
+        reason: decision.reason
+      });
+    }
+  }
+
+  return decision;
+}
+
+module.exports = { emitToolInvocation, withToolInstrumentation, emitSessionStart, emitSessionEnd, withSession, emitSecretRetrieval, checkAndEnforcePolicy };
