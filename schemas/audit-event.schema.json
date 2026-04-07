@@ -106,6 +106,7 @@
       "description": "Emitted when an MCP server executes a tool call on behalf of an agent.",
       "metadata_fields": {
         "tool_name": "string — name of the tool invoked (same as action field)",
+        "risk_level": "string (optional) — risk classification from the platform registry: 'LOW' | 'MEDIUM' | 'HIGH' | 'DESTRUCTIVE'. Populated automatically when the tool is registered in config/tool-classifications.json.",
         "arguments_summary": "string — non-sensitive summary or schema of arguments; must not include secret or PII values",
         "execution_duration_ms": "number — duration of tool execution in milliseconds",
         "result_summary": "string — non-sensitive description of the outcome; must not include raw result data if sensitive"

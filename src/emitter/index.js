@@ -29,6 +29,7 @@ const { randomUUID } = require('crypto');
 const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent } = require('./event-builder');
 const { submit } = require('./transport');
 const { record } = require('./failure-observer');
+const { lookupRiskLevel } = require('./classification-registry');
 
 function generateCorrelationId() {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -50,7 +51,8 @@ function emitToolInvocation(context, outcome) {
   try {
     const resolvedContext = {
       ...context,
-      correlationId: context.correlationId || generateCorrelationId()
+      correlationId: context.correlationId || generateCorrelationId(),
+      riskLevel: context.riskLevel || lookupRiskLevel(context.toolName)
     };
 
     const event = buildToolInvocationEvent(resolvedContext, outcome);

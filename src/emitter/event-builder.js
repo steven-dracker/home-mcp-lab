@@ -136,6 +136,10 @@ function buildToolInvocationEvent(context, outcome) {
     tool_name: context.toolName
   };
 
+  if (context.riskLevel) {
+    metadata.risk_level = context.riskLevel;
+  }
+
   if (outcome.argumentsSummary) {
     metadata.arguments_summary = String(outcome.argumentsSummary).slice(0, 500);
   }

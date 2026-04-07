@@ -1,0 +1,86 @@
+[
+  {
+    "tool_name": "get_me",
+    "risk_level": "LOW",
+    "description": "Returns the authenticated user's GitHub identity.",
+    "rationale": "Read-only. Returns only the calling user's own profile data. No external side effects.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "search_repositories",
+    "risk_level": "LOW",
+    "description": "Searches GitHub repositories by query string.",
+    "rationale": "Read-only search. No mutations. Results do not include sensitive data beyond what is publicly available.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "list_issues",
+    "risk_level": "LOW",
+    "description": "Lists issues for a repository.",
+    "rationale": "Read-only. Retrieves existing issue metadata. No external side effects.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "list_commits",
+    "risk_level": "LOW",
+    "description": "Lists commits for a repository branch.",
+    "rationale": "Read-only. Returns commit history metadata. No external side effects.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "get_file_contents",
+    "risk_level": "MEDIUM",
+    "description": "Retrieves the contents of a file from a GitHub repository.",
+    "rationale": "Read operation but accesses file contents directly, which may include sensitive configuration, credentials references, or proprietary data. Traverses access boundaries.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "get_pull_request",
+    "risk_level": "MEDIUM",
+    "description": "Retrieves details of a pull request including diff content.",
+    "rationale": "Read operation but may expose source code changes, review comments, and contributor information. Limited external interaction.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "add_comment_to_pending_review",
+    "risk_level": "MEDIUM",
+    "description": "Adds a comment to a pending pull request review.",
+    "rationale": "Additive side effect but non-destructive. Review is still pending and not published. Reversible prior to review submission.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "create_issue",
+    "risk_level": "HIGH",
+    "description": "Creates a new issue in a GitHub repository.",
+    "rationale": "Writes to an external system. Notifications are sent to repository subscribers. Not easily undone without closing or deleting the issue.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "update_pull_request",
+    "risk_level": "HIGH",
+    "description": "Updates the title, body, or state of an existing pull request.",
+    "rationale": "Mutates an existing external resource. Changes are visible to collaborators and may affect CI or review workflows.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "create_or_update_file",
+    "risk_level": "HIGH",
+    "description": "Creates or updates a file in a GitHub repository.",
+    "rationale": "Writes directly to repository content. Changes are committed and visible in history. Affects production branches if not scoped to a feature branch.",
+    "allowed_by_default": true
+  },
+  {
+    "tool_name": "merge_pull_request",
+    "risk_level": "HIGH",
+    "description": "Merges a pull request into the target branch.",
+    "rationale": "Integrates changes into the target branch. High impact if the PR affects a protected branch. Reversible only via revert commit.",
+    "allowed_by_default": false
+  },
+  {
+    "tool_name": "delete_branch",
+    "risk_level": "DESTRUCTIVE",
+    "description": "Deletes a branch from a GitHub repository.",
+    "rationale": "Irreversible if the branch is not backed up locally. Unmerged commits on the branch may be lost. No confirmation or undo mechanism.",
+    "allowed_by_default": false
+  }
+]
