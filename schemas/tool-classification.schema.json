@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "home-mcp-lab/tool-classification",
+  "title": "Home MCP Compliance Lab — Tool Classification Schema",
+  "description": "Schema for individual MCP tool risk classifications in the platform registry. Each entry assigns a risk level to a specific tool, providing the foundation for future control-layer enforcement.",
+  "schema_version": "0.1.0",
+
+  "type": "object",
+  "required": ["tool_name", "risk_level", "description", "rationale", "allowed_by_default"],
+  "additionalProperties": false,
+
+  "properties": {
+
+    "tool_name": {
+      "type": "string",
+      "description": "Canonical name of the MCP tool as exposed by the server (e.g. 'search_repositories', 'create_or_update_file')."
+    },
+
+    "risk_level": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "DESTRUCTIVE"],
+      "description": "Risk classification for this tool. See risk level definitions below."
+    },
+
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what the tool does."
+    },
+
+    "rationale": {
+      "type": "string",
+      "description": "Justification for the assigned risk level, referencing the tool's capabilities and side effects."
+    },
+
+    "allowed_by_default": {
+      "type": "boolean",
+      "description": "Whether this tool is permitted to execute without additional approval under current policy. Future enforcement tasks (CTRL-HMCP-000002, CTRL-HMCP-000003) will act on this field."
+    }
+
+  },
+
+  "definitions": {
+
+    "risk_levels": {
+      "LOW": {
+        "description": "Read-only operations with no external side effects. Data is read but not written or transmitted beyond the MCP server boundary.",
+        "examples": ["search_repositories", "get_me", "list_issues", "list_commits"]
+      },
+      "MEDIUM": {
+        "description": "Operations with limited external interaction. May read sensitive content, traverse access boundaries, or have minor additive side effects (e.g. adding a non-destructive annotation).",
+        "examples": ["get_file_contents", "get_pull_request", "list_secret_scanning_alerts"]
+      },
+      "HIGH": {
+        "description": "Write operations, mutations, or actions that interact with external systems. Changes are typically reversible but require explicit authorization.",
+        "examples": ["create_issue", "create_or_update_file", "update_pull_request", "merge_pull_request"]
+      },
+      "DESTRUCTIVE": {
+        "description": "Irreversible or high-impact actions. Deletions, force operations, or actions that could cause significant data loss or service disruption.",
+        "examples": ["delete_branch", "delete_repository", "force_push"]
+      }
+    }
+
+  },
+
+  "constraints": [
+    "tool_name must match the exact name the MCP server exposes — no prefixes or aliases.",
+    "risk_level must be one of the four defined values — no custom levels.",
+    "rationale must reference the specific capability or side effect driving the classification.",
+    "This schema is platform-owned. Projects must not define their own classification schemas."
+  ]
+}
