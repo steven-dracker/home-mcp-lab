@@ -90,6 +90,23 @@ The operator does not write prompts or generate PR text — those are ChatGPT's 
 
 ---
 
+## Canonical Workspace and State Recovery
+
+This repo has one **canonical operational workspace** — the designated host and path where active implementation work is done. Additional clones may exist on other machines for convenience, but they are not primary working contexts.
+
+**Canonical workspace:** `[CANONICAL_HOST]:[CANONICAL_PATH]`
+
+Before starting or resuming work:
+
+1. Work from the canonical workspace only
+2. Run `git pull origin main` to sync before starting any session
+3. Check the latest handoff in `handoffs/` — not just the boot block — for current state
+4. If `git log` shows merged PRs not reflected in the latest handoff, create a fresh handoff before starting new work
+
+**GitHub is the canonical source of truth.** If the boot block, primer, or handoff conflict with the merged PR history on GitHub, GitHub wins.
+
+---
+
 ## Starting a New ChatGPT Session
 
 1. Open a new ChatGPT conversation
@@ -181,6 +198,9 @@ If this project does not use an MCP server, the `mcp-node/` directory is optiona
 | Committing directly to main | Bypasses PR review and branch discipline | Always use a feature branch |
 | Treating the GitHub Project board as canonical | Project boards are derived visualizations | Trust issues + labels as the source of truth |
 | Assuming MCP node config is required | Many projects don't need an MCP server | Only adapt `mcp-node/` if applicable |
+| Working from a secondary clone | State can diverge; secondary clones are convenience only | Work from the canonical workspace defined in the primer |
+| Trusting the boot block over the latest handoff | The boot block may lag merged work | Check the latest handoff first; it is authoritative for dynamic state |
+| Starting work when handoff predates significant merged PRs | New work builds on stale state | Compare `git log` to the latest handoff; create a fresh handoff if needed |
 
 ---
 

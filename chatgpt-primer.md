@@ -294,6 +294,16 @@ Do not continue to the next task across a session boundary without a handoff.
 
 ---
 
+### Canonical Workspace and State Recovery
+
+- **GitHub is the canonical source of truth** for all merged repository state. Merged PR history is authoritative. Local clones, boot blocks, and handoffs are derived from it — not equivalent to it.
+- Each governed repo has **one canonical operational workspace** (a designated host and path). Additional clones may exist for convenience or backup but must not be treated as primary working contexts.
+- Before starting or resuming work from any clone, sync from `origin/main` first: `git pull origin main`.
+- Do not assume multiple local clones are equivalent. Only the canonical workspace should be used for active implementation sessions.
+- If merged PRs have materially advanced state beyond the latest handoff, **refresh the handoff before starting major new work**. Compare `git log` against the latest handoff to identify what is untracked, then create a fresh handoff before proceeding.
+
+---
+
 ## BACKLOG SNAPSHOT
 
 ### To-Do

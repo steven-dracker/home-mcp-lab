@@ -10,6 +10,7 @@
 - **Project Type:** [mcp-node | agent-workflow | content-pipeline | automation | general]
 - **Repo:** [repo name or URL]
 - **Prompt Schema:** [CC-PROJECT-XXXXXX] — tracks all Claude Code work for traceability
+- **Canonical Workspace:** [HOST]:[PATH] — primary operational clone; additional clones are convenience/backup only
 
 ---
 
@@ -50,13 +51,13 @@
 
 ---
 
-### HANDOFF PRECEDENCE RULE
+### CANONICAL STATE RULES
 
-The most recent handoff in `handoffs/` is the authoritative source of truth for dynamic state.
-
-If this boot block conflicts with the latest handoff, the handoff wins.
-
-Update this boot block after each session boundary by reflecting the handoff's current state summary.
+- GitHub `main` and merged PR history are the authoritative source of truth for merged repo state
+- This boot block is a convenience operational surface — it may lag behind merged work
+- If this boot block conflicts with the latest handoff in `handoffs/`, the handoff wins
+- If merged work has advanced beyond the latest handoff, refresh state before starting major new work
+- Before resuming from any clone, sync from `origin/main`: `git pull origin main`
 
 ---
 

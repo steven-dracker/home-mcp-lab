@@ -63,7 +63,19 @@ In each copied file, replace all `[PLACEHOLDER]` values:
 
 ---
 
-## Step 3 — Initialize the Boot Block
+## Step 3 — Define the Canonical Operational Workspace
+
+Before customizing templates, decide which machine and path will be the **canonical operational workspace** for this repo.
+
+- This is the single designated location where active implementation work happens
+- Additional clones on other machines are convenience/backup only
+- Record this in `chatgpt-primer.md` (in the `CANONICAL WORKSPACE AND STATE RECOVERY` section) and in `CLAUDE.md` (in the `CANONICAL STATE RULES` section) before the first session
+
+Format: `hostname:/path/to/repo` (e.g., `dude-ops-01:/home/drake/projects/my-project`)
+
+---
+
+## Step 4 — Initialize the Boot Block
 
 In `CLAUDE.md` (or `boot-block.template.md`):
 
@@ -74,7 +86,7 @@ In `CLAUDE.md` (or `boot-block.template.md`):
 
 ---
 
-## Step 4 — Fill in Project Metadata
+## Step 5 — Fill in Project Metadata
 
 In `project-metadata.yaml`:
 
@@ -85,7 +97,7 @@ In `project-metadata.yaml`:
 
 ---
 
-## Step 5 — Adapt the Primer
+## Step 6 — Adapt the Primer
 
 In `chatgpt-primer.md`:
 
@@ -96,7 +108,7 @@ In `chatgpt-primer.md`:
 
 ---
 
-## Step 6 — Adapt the Workflow Rules
+## Step 7 — Adapt the Workflow Rules
 
 In `context/workflow-rules.md`:
 
@@ -106,7 +118,7 @@ In `context/workflow-rules.md`:
 
 ---
 
-## Step 7 — Adapt the MCP Node Starter (if applicable)
+## Step 8 — Adapt the MCP Node Starter (if applicable)
 
 In `mcp-node/project-node.json`:
 
@@ -118,7 +130,7 @@ In `mcp-node/project-node.json`:
 
 ---
 
-## Step 8 — Initial Commit
+## Step 9 — Initial Commit
 
 Commit the configured bootstrap files to the new repo:
 
@@ -130,7 +142,7 @@ git push origin main
 
 ---
 
-## Step 9 — Create the First Handoff
+## Step 10 — Create the First Handoff
 
 After the first task is defined, create the first handoff using `handoffs/HANDOFF-TEMPLATE.md`.
 
@@ -141,9 +153,9 @@ Fill in:
 
 ---
 
-## Step 10 — Run the Validation Checklist
+## Step 11 — Run the Validation Checklist
 
-Run `docs/bootstrap-validation-checklist.md` to confirm the repo is operationally ready.
+Run `docs/bootstrap-validation-checklist.md` to confirm the repo is operationally ready before the first session.
 
 When all checks pass, the repo is ready for Claude Code and ChatGPT usage.
 
