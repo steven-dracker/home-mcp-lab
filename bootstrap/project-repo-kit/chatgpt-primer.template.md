@@ -105,6 +105,16 @@ Resume pattern:
 
 ---
 
+## CANONICAL WORKSPACE AND STATE RECOVERY
+
+- **GitHub is the canonical source of truth** for all merged repository state. Merged PR history is authoritative. Local clones, boot blocks, and handoffs are derived from it — not equivalent to it.
+- This repo has **one canonical operational workspace**: `[CANONICAL_HOST]:[CANONICAL_PATH]`. Additional clones may exist for convenience or backup but must not be treated as primary working contexts.
+- Before starting or resuming work from any clone, sync from `origin/main` first: `git pull origin main`.
+- Do not assume multiple local clones are equivalent. Only the canonical workspace should be used for active implementation sessions.
+- If merged PRs have materially advanced state beyond the latest handoff, refresh the handoff before starting major new work. Compare `git log` against the latest handoff to identify untracked state, then create a fresh handoff before proceeding.
+
+---
+
 ## BRANCH AND PR DISCIPLINE
 
 - Feature branches only — never commit directly to main

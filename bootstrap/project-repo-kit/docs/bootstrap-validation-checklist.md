@@ -38,8 +38,14 @@ Run after completing the repo setup checklist and before the first session.
 ## Operational State
 
 - [ ] Boot block `ACTIVE TASK` field is set to the first task
-- [ ] Handoff precedence rule is present in the boot block
+- [ ] Canonical state rules are present in the boot block (`CLAUDE.md`)
 - [ ] `project-metadata.yaml` reflects accurate integration status
+
+## Canonical Workspace
+
+- [ ] Canonical operational workspace (host and path) is defined in `chatgpt-primer.md`
+- [ ] Canonical operational workspace is defined in `CLAUDE.md` (PROJECT IDENTITY section)
+- [ ] Canonical workspace clone is synced to `origin/main` before first session (`git pull origin main`)
 
 ---
 

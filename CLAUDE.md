@@ -193,6 +193,15 @@ The integration contract (schema + interface) is defined in this repo. Projects 
 ### KNOWN DEBT
 - None yet
 
+### CANONICAL STATE RULES
+
+- GitHub `main` and merged PR history are the authoritative source of truth for merged repo state
+- This boot block is a convenience operational surface — it may lag behind merged work
+- If this boot block conflicts with the latest handoff in `docs/handoffs/`, the handoff wins
+- If merged work has advanced beyond the latest handoff, refresh state before starting major new work
+
+---
+
 ### BOOT BLOCK UPDATE CHECKLIST (apply after every CC-HMCP task)
 
 - [ ] Boot Block ID updated to current prompt (CC-HMCP-XXXXXX)
