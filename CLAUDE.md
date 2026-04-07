@@ -406,3 +406,8 @@ If a prompt is resumed after an interruption:
 - PR text generation is a separate step, typically done after the execution summary is reviewed
 
 ---
+
+## Auto-Approve Convention
+
+- Execution prompts may optionally include an Auto-Approve header. 
+- ChatGPT should ask the user whether to enable it before generating implementation prompts unless the user already made that explicit for the current task.
