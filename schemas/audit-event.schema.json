@@ -38,7 +38,7 @@
     "event_type": {
       "type": "string",
       "description": "Categorizes the event. See defined event types below.",
-      "enum": ["tool.invocation", "tool.denial", "secret.retrieval", "session.start", "session.end"],
+      "enum": ["tool.invocation", "tool.denial", "tool.approval_granted", "secret.retrieval", "session.start", "session.end"],
       "example": "tool.invocation"
     },
 
@@ -114,12 +114,24 @@
     },
 
     "event_type.tool.denial": {
-      "description": "Emitted when a tool invocation is blocked by the platform policy gate before execution begins. The tool is never invoked. Emitted with status:'failure'.",
+      "description": "Emitted when a tool invocation is blocked by the platform policy gate before execution begins. The tool is never invoked. Emitted with status:'failure'. Covers both outright denial (DESTRUCTIVE tier) and approval-pending denial (HIGH tier).",
       "metadata_fields": {
         "tool_name": "string — name of the tool that was denied",
         "risk_level": "string — risk classification at the time of denial: 'LOW' | 'MEDIUM' | 'HIGH' | 'DESTRUCTIVE' | 'UNKNOWN'",
-        "denial_reason": "string — machine-readable denial reason; currently 'policy_denied'",
-        "policy_basis": "string — machine-readable explanation of the policy that caused the denial (e.g. 'destructive_tool_not_allowed_by_default')",
+        "denial_reason": "string — machine-readable denial reason: 'policy_denied' (DESTRUCTIVE tier, CTRL-HMCP-000002) | 'requires_approval' (HIGH tier, CTRL-HMCP-000003)",
+        "policy_basis": "string — machine-readable explanation of the policy that caused the denial (e.g. 'destructive_tool_not_allowed_by_default', 'high_risk_tool_requires_approval')",
+        "approval_required": "boolean (optional) — true when denial_reason is 'requires_approval'; indicates the tool can proceed if approval is explicitly satisfied",
+        "initiating_context": "string (optional) — prompt ID or workflow context if available"
+      }
+    },
+
+    "event_type.tool.approval_granted": {
+      "description": "Emitted when a HIGH approval-required tool is allowed because an explicit approval signal was satisfied (CTRL-HMCP-000003). This event precedes the tool.invocation event for the same tool call. Emitted with status:'success'.",
+      "metadata_fields": {
+        "tool_name": "string — name of the tool whose approval was granted",
+        "risk_level": "string — risk classification: expected 'HIGH' for this event type",
+        "policy_basis": "string — machine-readable explanation: 'high_risk_tool_allowed_by_explicit_approval'",
+        "approval_mechanism": "string — how approval was satisfied: 'context_flag' (approvalGranted=true in call context) | 'env_var' (HMCP_APPROVAL_GRANTED=true)",
         "initiating_context": "string (optional) — prompt ID or workflow context if available"
       }
     },

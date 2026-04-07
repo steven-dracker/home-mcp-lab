@@ -12,7 +12,7 @@
  *   withToolInstrumentation(context, fn)   — wrap an async tool call with instrumentation
  *   emitSessionStart(context)              — emit session.start directly; returns correlationId
  *   emitSessionEnd(context, outcome)       — emit session.end directly
- *   checkAndEnforcePolicy(context)         — evaluate policy; emit tool.denial if denied; returns decision
+ *   checkAndEnforcePolicy(context)         — evaluate policy; emit tool.denial or tool.approval_granted; returns decision
  *
  * Context shape:
  *   toolName           string  required  — MCP tool name (e.g. "create_issue")
@@ -27,7 +27,7 @@
  */
 
 const { randomUUID } = require('crypto');
-const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent, buildToolDenialEvent } = require('./event-builder');
+const { buildToolInvocationEvent, buildSessionStartEvent, buildSessionEndEvent, buildSecretRetrievalEvent, buildToolDenialEvent, buildToolApprovalGrantedEvent } = require('./event-builder');
 const { submit } = require('./transport');
 const { record } = require('./failure-observer');
 const { lookupRiskLevel } = require('./classification-registry');
@@ -263,23 +263,33 @@ function emitSecretRetrieval(context, outcome) {
 }
 
 /**
- * Evaluate policy for a tool and emit a tool.denial event if denied.
+ * Evaluate policy for a tool and emit audit events for all enforcement outcomes.
  *
  * Returns a decision object. When allowed === false, the tool must not be
  * invoked — the caller is responsible for gating execution on this result.
  *
- * Never throws — denial emission failures are handled by the failure observer.
+ * Never throws — emission failures are handled by the failure observer.
+ *
+ * Enforcement tiers:
+ *   Tier 1 (DESTRUCTIVE): denied outright; tool.denial emitted with reason 'policy_denied'.
+ *   Tier 1 override: allowed via allowDestructive; no additional event emitted.
+ *   Tier 2 (HIGH, approval-required): blocked; tool.denial emitted with reason 'requires_approval'.
+ *   Tier 2 approved: allowed; tool.approval_granted emitted with mechanism captured.
  *
  * context shape — same as emitToolInvocation context plus:
- *   allowDestructive  boolean  optional  — per-call explicit override; default false
+ *   allowDestructive  boolean  optional  — per-call explicit destructive override (tier 1); default false
+ *   approvalGranted   boolean  optional  — per-call explicit approval (tier 2); default false
  *
  * Returned decision shape:
  *   {
- *     allowed:      boolean
- *     toolName:     string
- *     riskLevel:    string|null
- *     reason:       'allowed' | 'policy_denied' | 'override_allowed'
- *     policyBasis:  string
+ *     allowed:           boolean
+ *     toolName:          string
+ *     riskLevel:         string|null
+ *     reason:            'allowed' | 'policy_denied' | 'override_allowed' | 'requires_approval' | 'approved'
+ *     policyBasis:       string
+ *     approvalRequired:  boolean   (present for HIGH tier-2 tools)
+ *     approvalSatisfied: boolean   (present for HIGH tier-2 tools)
+ *     approvalMechanism: string|null (present for HIGH tier-2 tools when approved)
  *   }
  */
 function checkAndEnforcePolicy(context) {
@@ -289,12 +299,25 @@ function checkAndEnforcePolicy(context) {
   };
 
   const decision = evaluatePolicy(resolvedContext.toolName, {
-    allowDestructive: resolvedContext.allowDestructive
+    allowDestructive: resolvedContext.allowDestructive,
+    approvalGranted: resolvedContext.approvalGranted
   });
 
   if (!decision.allowed) {
+    // Covers both 'policy_denied' (tier 1) and 'requires_approval' (tier 2).
     try {
       const event = buildToolDenialEvent(resolvedContext, decision);
+      submit(event);
+    } catch (err) {
+      record(err, {
+        toolName: resolvedContext.toolName,
+        reason: decision.reason
+      });
+    }
+  } else if (decision.reason === 'approved') {
+    // Tier 2 approval granted — emit explicit audit evidence.
+    try {
+      const event = buildToolApprovalGrantedEvent(resolvedContext, decision);
       submit(event);
     } catch (err) {
       record(err, {

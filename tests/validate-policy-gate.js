@@ -61,12 +61,14 @@ delete process.env.HMCP_ALLOW_DESTRUCTIVE;
     assert.strictEqual(d.reason, 'allowed');
   });
 
-  await test('HIGH tool with allowed_by_default=false (merge_pull_request) is allowed — HIGH not subject to enforcement', async () => {
-    // merge_pull_request is HIGH + allowed_by_default=false, but enforcement is DESTRUCTIVE only
+  await test('HIGH tool with allowed_by_default=false (merge_pull_request) requires approval — CTRL-HMCP-000003', async () => {
+    // merge_pull_request is HIGH + allowed_by_default=false; subject to tier-2 approval enforcement
     const d = evaluatePolicy('merge_pull_request', {});
-    assert.strictEqual(d.allowed, true);
+    assert.strictEqual(d.allowed, false);
     assert.strictEqual(d.riskLevel, 'HIGH');
-    assert.strictEqual(d.reason, 'allowed');
+    assert.strictEqual(d.reason, 'requires_approval');
+    assert.strictEqual(d.approvalRequired, true);
+    assert.strictEqual(d.approvalSatisfied, false);
   });
 
   await test('DESTRUCTIVE tool (delete_branch) is denied by default', async () => {
