@@ -1,31 +1,45 @@
 'use strict';
 
 /**
- * Home MCP Compliance Lab — Policy Gate (CTRL-HMCP-000002)
+ * Home MCP Compliance Lab — Policy Gate (CTRL-HMCP-000002 / CTRL-HMCP-000003)
  *
  * Evaluates whether a tool invocation is permitted under current policy.
  *
- * Current policy: DESTRUCTIVE tools with allowed_by_default=false are denied
- * unless an explicit override is active in the execution context.
+ * Enforcement tiers (evaluated in order):
  *
- * This module is pure — it reads registry and override state, returns a
- * decision, and emits nothing. Side effects (audit emission) happen in the
+ *   TIER 1 — DESTRUCTIVE tools (CTRL-HMCP-000002)
+ *     Tools with risk_level='DESTRUCTIVE' and allowed_by_default=false are
+ *     denied outright unless the explicit destructive override is active.
+ *     Override: context.allowDestructive=true or HMCP_ALLOW_DESTRUCTIVE=true.
+ *
+ *   TIER 2 — HIGH approval-required tools (CTRL-HMCP-000003)
+ *     Tools with risk_level='HIGH' and allowed_by_default=false require an
+ *     explicit approval signal. Without it, execution is blocked (reason:
+ *     'requires_approval'). With it, execution is allowed (reason: 'approved').
+ *     Approval: context.approvalGranted=true or HMCP_APPROVAL_GRANTED=true.
+ *
+ * This module is pure — it reads registry and override/approval state, returns
+ * a decision, and emits nothing. Side effects (audit emission) happen in the
  * caller (see emitter/index.js checkAndEnforcePolicy).
- *
- * Override mechanism:
- *   Pass { allowDestructive: true } in the execution context, or set the
- *   environment variable HMCP_ALLOW_DESTRUCTIVE=true. Both are intentional
- *   acts; neither is ever the default. Either can be removed to restore
- *   deny-by-default behavior without code changes.
  *
  * Decision result shape:
  *   {
- *     allowed:      boolean   — whether execution may proceed
- *     toolName:     string
- *     riskLevel:    string|null
- *     reason:       string    — 'allowed' | 'policy_denied' | 'override_allowed'
- *     policyBasis:  string    — short machine-readable explanation
+ *     allowed:           boolean        — whether execution may proceed
+ *     toolName:          string
+ *     riskLevel:         string|null
+ *     reason:            string         — see reason values below
+ *     policyBasis:       string         — short machine-readable explanation
+ *     approvalRequired:  boolean        — true when tier-2 applies (present only for HIGH tier-2 tools)
+ *     approvalSatisfied: boolean        — true when approval was explicitly granted (present only for HIGH tier-2 tools)
+ *     approvalMechanism: string|null    — 'context_flag' | 'env_var' | null (present only when approvalSatisfied=true)
  *   }
+ *
+ * Reason values:
+ *   'allowed'             — tool is permitted (no enforcement triggered)
+ *   'policy_denied'       — DESTRUCTIVE tool denied outright (tier 1)
+ *   'override_allowed'    — DESTRUCTIVE tool allowed via explicit override (tier 1)
+ *   'requires_approval'   — HIGH tool blocked; approval not satisfied (tier 2)
+ *   'approved'            — HIGH tool allowed; approval explicitly satisfied (tier 2)
  */
 
 const path = require('path');
@@ -55,8 +69,9 @@ function loadFullRegistry() {
  *
  * @param {string} toolName
  * @param {object} [executionContext={}]
- *   executionContext.allowDestructive {boolean} — explicit per-call override
- * @returns {{ allowed: boolean, toolName: string, riskLevel: string|null, reason: string, policyBasis: string }}
+ *   executionContext.allowDestructive  {boolean} — explicit per-call override (tier 1)
+ *   executionContext.approvalGranted   {boolean} — explicit per-call approval (tier 2)
+ * @returns {{ allowed: boolean, toolName: string, riskLevel: string|null, reason: string, policyBasis: string, approvalRequired?: boolean, approvalSatisfied?: boolean, approvalMechanism?: string|null }}
  */
 function evaluatePolicy(toolName, executionContext) {
   const ctx = executionContext || {};
@@ -66,40 +81,76 @@ function evaluatePolicy(toolName, executionContext) {
   const riskLevel = entry ? entry.risk_level : null;
   const allowedByDefault = entry ? entry.allowed_by_default : true;
 
-  // Only DESTRUCTIVE + not allowed_by_default triggers enforcement.
-  const subjectToEnforcement = riskLevel === 'DESTRUCTIVE' && !allowedByDefault;
+  // ── Tier 1: DESTRUCTIVE tools ──────────────────────────────────────────────
 
-  if (!subjectToEnforcement) {
+  const subjectToDestructiveEnforcement = riskLevel === 'DESTRUCTIVE' && !allowedByDefault;
+
+  if (subjectToDestructiveEnforcement) {
+    const overrideEnabled =
+      ctx.allowDestructive === true ||
+      process.env.HMCP_ALLOW_DESTRUCTIVE === 'true';
+
+    if (overrideEnabled) {
+      return {
+        allowed: true,
+        toolName,
+        riskLevel,
+        reason: 'override_allowed',
+        policyBasis: 'destructive_tool_allowed_by_explicit_override'
+      };
+    }
+
     return {
-      allowed: true,
+      allowed: false,
       toolName,
       riskLevel,
-      reason: 'allowed',
-      policyBasis: riskLevel ? `${riskLevel}_tool_allowed` : 'unclassified_tool_allowed'
+      reason: 'policy_denied',
+      policyBasis: 'destructive_tool_not_allowed_by_default'
     };
   }
 
-  // Check for an active override.
-  const overrideEnabled =
-    ctx.allowDestructive === true ||
-    process.env.HMCP_ALLOW_DESTRUCTIVE === 'true';
+  // ── Tier 2: HIGH approval-required tools ──────────────────────────────────
 
-  if (overrideEnabled) {
+  const subjectToApprovalEnforcement = riskLevel === 'HIGH' && !allowedByDefault;
+
+  if (subjectToApprovalEnforcement) {
+    const approvalViaCFlag = ctx.approvalGranted === true;
+    const approvalViaEnvVar = process.env.HMCP_APPROVAL_GRANTED === 'true';
+    const approvalSatisfied = approvalViaCFlag || approvalViaEnvVar;
+
+    if (approvalSatisfied) {
+      return {
+        allowed: true,
+        toolName,
+        riskLevel,
+        reason: 'approved',
+        policyBasis: 'high_risk_tool_allowed_by_explicit_approval',
+        approvalRequired: true,
+        approvalSatisfied: true,
+        approvalMechanism: approvalViaCFlag ? 'context_flag' : 'env_var'
+      };
+    }
+
     return {
-      allowed: true,
+      allowed: false,
       toolName,
       riskLevel,
-      reason: 'override_allowed',
-      policyBasis: 'destructive_tool_allowed_by_explicit_override'
+      reason: 'requires_approval',
+      policyBasis: 'high_risk_tool_requires_approval',
+      approvalRequired: true,
+      approvalSatisfied: false,
+      approvalMechanism: null
     };
   }
+
+  // ── Default: tool is allowed ───────────────────────────────────────────────
 
   return {
-    allowed: false,
+    allowed: true,
     toolName,
     riskLevel,
-    reason: 'policy_denied',
-    policyBasis: 'destructive_tool_not_allowed_by_default'
+    reason: 'allowed',
+    policyBasis: riskLevel ? `${riskLevel}_tool_allowed` : 'unclassified_tool_allowed'
   };
 }
 
